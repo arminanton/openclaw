@@ -67,6 +67,9 @@ import type {
 import type { VideoGenerationProvider } from "../video-generation/types.js";
 import type { WizardPrompter } from "../wizard/prompts.js";
 import type {
+  CliBackendAuthEpochMode,
+  CliBackendPreparedExecution,
+  CliBackendPrepareExecutionContext,
   CliBackendPlugin,
   CliBundleMcpMode,
   PluginTextReplacement,
@@ -141,6 +144,9 @@ export type {
   PluginConversationBindingResolutionDecision,
 } from "./conversation-binding.types.js";
 export type {
+  CliBackendAuthEpochMode,
+  CliBackendPreparedExecution,
+  CliBackendPrepareExecutionContext,
   CliBackendPlugin,
   CliBundleMcpMode,
   PluginTextReplacement,
@@ -1838,13 +1844,11 @@ export type OpenClawPluginDefinition = {
   reload?: OpenClawPluginReloadRegistration;
   nodeHostCommands?: OpenClawPluginNodeHostCommand[];
   securityAuditCollectors?: OpenClawPluginSecurityAuditCollector[];
-  register?: (api: OpenClawPluginApi) => void | Promise<void>;
-  activate?: (api: OpenClawPluginApi) => void | Promise<void>;
+  register?: (api: OpenClawPluginApi) => void;
+  activate?: (api: OpenClawPluginApi) => void;
 };
 
-export type OpenClawPluginModule =
-  | OpenClawPluginDefinition
-  | ((api: OpenClawPluginApi) => void | Promise<void>);
+export type OpenClawPluginModule = OpenClawPluginDefinition | ((api: OpenClawPluginApi) => void);
 
 export type PluginRegistrationMode = "full" | "setup-only" | "setup-runtime" | "cli-metadata";
 
