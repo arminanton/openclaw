@@ -4689,6 +4689,22 @@ export const GENERATED_BASE_CONFIG_SCHEMA: BaseConfigSchemaResponse = {
                   },
                 ],
               },
+              responseUsage: {
+                anyOf: [
+                  {
+                    type: "string",
+                    const: "off",
+                  },
+                  {
+                    type: "string",
+                    const: "tokens",
+                  },
+                  {
+                    type: "string",
+                    const: "full",
+                  },
+                ],
+              },
               elevatedDefault: {
                 anyOf: [
                   {
@@ -17890,6 +17906,12 @@ export const GENERATED_BASE_CONFIG_SCHEMA: BaseConfigSchemaResponse = {
             description:
               "Prefix text prepended to outbound assistant replies before sending to channels. Use for lightweight branding/context tags and avoid long prefixes that reduce content density.",
           },
+          responseFooter: {
+            type: "string",
+            title: "Outbound Response Footer",
+            description:
+              "Footer text appended to outbound assistant replies after the main body. Use for lightweight signatures, inline usage/context summaries, or compliance notes; keep it short so it does not overwhelm the reply.",
+          },
           groupChat: {
             type: "object",
             properties: {
@@ -24672,6 +24694,11 @@ export const GENERATED_BASE_CONFIG_SCHEMA: BaseConfigSchemaResponse = {
       help: "Optional default skill allowlist inherited by agents that omit agents.list[].skills. Omit for unrestricted skills, set [] to give inheriting agents no skills, and remember explicit agents.list[].skills replaces this default instead of merging with it.",
       tags: ["advanced"],
     },
+    "agents.defaults.responseUsage": {
+      label: "Default Response Usage Footer",
+      help: 'Default response-usage footer mode inherited by sessions that do not set responseUsage explicitly: "off", "tokens", or "full". Use this to enable fleet-wide inline usage/context summaries while still allowing sessions to override or explicitly suppress them.',
+      tags: ["advanced"],
+    },
     "agents.defaults.workspace": {
       label: "Workspace",
       help: "Default workspace path exposed to agent runtime tools for filesystem context and repo-aware behavior. Set this explicitly when running from wrappers so path resolution stays deterministic.",
@@ -26669,7 +26696,12 @@ export const GENERATED_BASE_CONFIG_SCHEMA: BaseConfigSchemaResponse = {
     },
     "messages.responsePrefix": {
       label: "Outbound Response Prefix",
-      help: "Prefix text prepended to outbound assistant replies before sending to channels. Use for lightweight branding/context tags and avoid long prefixes that reduce content density.",
+      help: "Prefix text prepended to outbound assistant replies before sending to channels. Supports the same template placeholders as messages.responseFooter, including late-bound model, usage, context, and cost values when they are available by final-send time; keep it short so streaming replies still read naturally.",
+      tags: ["advanced"],
+    },
+    "messages.responseFooter": {
+      label: "Outbound Response Footer",
+      help: "Footer text appended to outbound assistant replies after the main body. Supports lightweight signatures plus template placeholders for model, usage, context-window, session, and estimated cost details; when the footer already references usage-style placeholders, OpenClaw suppresses the separate built-in usage line to avoid duplicate footers.",
       tags: ["advanced"],
     },
     "messages.groupChat": {

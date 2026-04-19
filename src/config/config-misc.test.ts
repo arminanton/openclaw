@@ -361,7 +361,7 @@ describe("gateway.channelHealthCheckMinutes", () => {
 });
 
 describe("config identity/materialization regressions", () => {
-  it("keeps explicit responsePrefix and group mention patterns", () => {
+  it("keeps explicit response prefix/footer and group mention patterns", () => {
     const res = validateConfigObject({
       agents: {
         list: [
@@ -378,15 +378,33 @@ describe("config identity/materialization regressions", () => {
       },
       messages: {
         responsePrefix: "✅",
+        responseFooter: "— footer",
       },
     });
 
     expect(res.ok).toBe(true);
     if (res.ok) {
       expect(res.config.messages?.responsePrefix).toBe("✅");
+      expect(res.config.messages?.responseFooter).toBe("— footer");
       expect(res.config.agents?.list?.[0]?.groupChat?.mentionPatterns).toEqual(["@openclaw"]);
     }
   });
+
+  it("keeps default responseUsage materialized under agents.defaults", () => {
+    const res = validateConfigObject({
+      agents: {
+        defaults: {
+          responseUsage: "full",
+        },
+      },
+    });
+
+    expect(res.ok).toBe(true);
+    if (res.ok) {
+      expect(res.config.agents?.defaults?.responseUsage).toBe("full");
+    }
+  });
+
 
   it("preserves empty responsePrefix when identity is present", () => {
     const res = validateConfigObject({

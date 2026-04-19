@@ -168,8 +168,11 @@ export function normalizeUsageDisplay(raw?: string | null): UsageDisplayLevel | 
   return undefined;
 }
 
-export function resolveResponseUsageMode(raw?: string | null): UsageDisplayLevel {
-  return normalizeUsageDisplay(raw) ?? "off";
+export function resolveResponseUsageMode(
+  raw?: string | null,
+  fallbackRaw?: string | null,
+): UsageDisplayLevel {
+  return normalizeUsageDisplay(raw) ?? normalizeUsageDisplay(fallbackRaw) ?? "off";
 }
 
 export function normalizeFastMode(raw?: string | boolean | null): boolean | undefined {

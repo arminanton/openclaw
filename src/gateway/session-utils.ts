@@ -39,6 +39,7 @@ import {
   type SessionScope,
 } from "../config/sessions.js";
 import type { OpenClawConfig } from "../config/types.openclaw.js";
+import { normalizeUsageDisplay } from "../auto-reply/thinking.js";
 import { openBoundaryFileSync } from "../infra/boundary-file-read.js";
 import {
   normalizeAgentId,
@@ -1293,7 +1294,7 @@ export function buildGatewaySessionRow(params: {
     runtimeMs: subagentRun ? subagentRuntimeMs : entry?.runtimeMs,
     parentSessionKey: subagentOwner || entry?.parentSessionKey,
     childSessions,
-    responseUsage: entry?.responseUsage,
+    responseUsage: normalizeUsageDisplay(entry?.responseUsage ?? cfg.agents?.defaults?.responseUsage),
     modelProvider: selectedModel?.provider ?? modelProvider,
     model: selectedModel?.model ?? model,
     contextTokens,
