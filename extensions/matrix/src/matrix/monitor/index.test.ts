@@ -153,7 +153,12 @@ vi.mock("../../runtime-api.js", () => {
     chunkTextForOutbound: vi.fn((text: string) => [text]),
     collectStatusIssuesFromLastError: () => [],
     createActionGate: () => () => true,
-    createReplyPrefixOptions: () => ({}),
+    createReplyPrefixOptions: () => ({
+      responsePrefix: undefined,
+      responsePrefixContextProvider: () => ({ identityName: undefined }),
+      onModelSelected: () => undefined,
+      onResponseTemplateContextResolved: () => undefined,
+    }),
     createTypingCallbacks: () => ({}),
     formatDocsLink: (input: string) => input,
     formatZonedTimestamp: () => "2026-03-27T00:00:00.000Z",

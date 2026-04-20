@@ -1,5 +1,5 @@
 import { normalizeLowercaseStringOrEmpty } from "../../shared/string-coerce.js";
-import { formatTokenCount, formatUsd } from "../../utils/usage-format.js";
+import { formatTokenCount, formatUsd } from "../../utils/usage-format-shared.js";
 
 /**
  * Template interpolation for response metadata templates such as

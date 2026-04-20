@@ -100,15 +100,11 @@ export function describeBundledWebSearchFastPathContract(pluginId: string) {
         origin: "bundled",
         onlyPluginIds: [pluginId],
       }).filter((provider) => provider.pluginId === pluginId);
+
       const bundledProviderEntries = loadBundledCapabilityRuntimeRegistry({
         pluginIds: [pluginId],
         pluginSdkResolution: "dist",
-      })
-        .webSearchProviders.filter((entry) => entry.pluginId === pluginId)
-        .map((entry) => ({
-          pluginId: entry.pluginId,
-          ...entry.provider,
-        }));
+      }).webSearchProviders.filter((entry) => entry.pluginId === pluginId);
 
       expect(
         sortComparableEntries(
@@ -121,10 +117,10 @@ export function describeBundledWebSearchFastPathContract(pluginId: string) {
         ),
       ).toEqual(
         sortComparableEntries(
-          bundledProviderEntries.map(({ pluginId: entryPluginId, ...provider }) =>
+          bundledProviderEntries.map((entry) =>
             toComparableEntry({
-              pluginId: entryPluginId,
-              provider,
+              pluginId: entry.pluginId,
+              provider: entry.provider,
             }),
           ),
         ),
@@ -132,10 +128,10 @@ export function describeBundledWebSearchFastPathContract(pluginId: string) {
 
       for (const fastPathProvider of fastPathProviders) {
         const bundledEntry = bundledProviderEntries.find(
-          (entry) => entry.id === fastPathProvider.id,
+          (entry) => entry.provider.id === fastPathProvider.id,
         );
         expect(bundledEntry).toBeDefined();
-        const contractProvider = bundledEntry!;
+        const contractProvider = bundledEntry!.provider;
 
         const fastSearchConfig: Record<string, unknown> = {};
         const contractSearchConfig: Record<string, unknown> = {};

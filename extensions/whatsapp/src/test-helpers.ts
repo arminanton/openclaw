@@ -406,8 +406,10 @@ vi.mock("./inbound/runtime-api.js", () => ({
 
 vi.mock("./auto-reply/monitor/inbound-dispatch.runtime.js", () => ({
   createChannelReplyPipeline: () => ({
-    onModelSelected: undefined,
     responsePrefix: undefined,
+    responsePrefixContextProvider: () => ({ identityName: undefined }),
+    onModelSelected: () => undefined,
+    onResponseTemplateContextResolved: () => undefined,
   }),
   dispatchReplyWithBufferedBlockDispatcher: createBufferedDispatchReplyMock(),
   finalizeInboundContext: <T>(ctx: T) => ctx,
@@ -448,8 +450,10 @@ vi.mock("./auto-reply/monitor/runtime-api.js", () => ({
       : params.currentMessage;
   },
   createChannelReplyPipeline: () => ({
-    onModelSelected: undefined,
     responsePrefix: undefined,
+    responsePrefixContextProvider: () => ({ identityName: undefined }),
+    onModelSelected: () => undefined,
+    onResponseTemplateContextResolved: () => undefined,
   }),
   dispatchReplyWithBufferedBlockDispatcher: createBufferedDispatchReplyMock(),
   finalizeInboundContext: <T>(ctx: T) => ctx,

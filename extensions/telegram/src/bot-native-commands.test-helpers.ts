@@ -63,8 +63,10 @@ const replyPipelineMocks = vi.hoisted(() => {
       (async () => dispatchReplyResult) as DispatchReplyWithBufferedBlockDispatcherFn,
     ),
     createChannelReplyPipeline: vi.fn((() => ({
+      responsePrefix: undefined,
       onModelSelected: () => {},
       responsePrefixContextProvider: () => undefined,
+      onResponseTemplateContextResolved: () => undefined,
     })) as unknown as CreateChannelReplyPipelineFn),
     recordInboundSessionMetaSafe: vi.fn<RecordInboundSessionMetaSafeFn>(async () => undefined),
     resolveChunkMode: vi.fn((() => "length") as unknown as ResolveChunkModeFn),

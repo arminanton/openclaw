@@ -83,7 +83,10 @@ describe("createMSTeamsReplyDispatcher", () => {
     };
 
     createChannelReplyPipelineMock.mockReturnValue({
+      responsePrefix: undefined,
+      responsePrefixContextProvider: () => ({ identityName: undefined }),
       onModelSelected: vi.fn(),
+      onResponseTemplateContextResolved: vi.fn(),
       typingCallbacks,
     });
 

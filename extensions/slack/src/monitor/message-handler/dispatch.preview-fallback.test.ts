@@ -98,10 +98,13 @@ vi.mock("openclaw/plugin-sdk/channel-feedback", () => ({
 
 vi.mock("openclaw/plugin-sdk/channel-reply-pipeline", () => ({
   createChannelReplyPipeline: () => ({
+    responsePrefix: undefined,
+    responsePrefixContextProvider: () => ({ identityName: undefined }),
     typingCallbacks: {
       onIdle: vi.fn(),
     },
-    onModelSelected: undefined,
+    onModelSelected: () => undefined,
+    onResponseTemplateContextResolved: () => undefined,
   }),
 }));
 

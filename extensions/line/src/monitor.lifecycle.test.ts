@@ -50,7 +50,12 @@ vi.mock("openclaw/plugin-sdk/runtime-env", async () => {
 });
 
 vi.mock("openclaw/plugin-sdk/channel-reply-pipeline", () => ({
-  createChannelReplyPipeline: vi.fn(() => ({})),
+  createChannelReplyPipeline: vi.fn(() => ({
+    responsePrefix: undefined,
+    responsePrefixContextProvider: () => ({ identityName: undefined }),
+    onModelSelected: () => undefined,
+    onResponseTemplateContextResolved: () => undefined,
+  })),
 }));
 
 vi.mock("openclaw/plugin-sdk/webhook-ingress", () => ({

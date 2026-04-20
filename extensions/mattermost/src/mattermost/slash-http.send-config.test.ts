@@ -43,13 +43,21 @@ vi.mock("./runtime-api.js", () => {
   return {
     buildModelsProviderData: mockState.buildModelsProviderData,
     createChannelReplyPipeline: vi.fn(() => ({
+      responsePrefix: undefined,
+      responsePrefixContextProvider: () => ({ identityName: undefined }),
       onModelSelected: vi.fn(),
+      onResponseTemplateContextResolved: vi.fn(),
       typingCallbacks: {},
     })),
     createDedupeCache: vi.fn(() => ({
       check: () => false,
     })),
-    createReplyPrefixOptions: vi.fn(() => ({})),
+    createReplyPrefixOptions: vi.fn(() => ({
+      responsePrefix: undefined,
+      responsePrefixContextProvider: () => ({ identityName: undefined }),
+      onModelSelected: vi.fn(),
+      onResponseTemplateContextResolved: vi.fn(),
+    })),
     createTypingCallbacks: vi.fn(() => ({ onReplyStart: vi.fn() })),
     isRequestBodyLimitError: vi.fn(() => false),
     logTypingFailure: vi.fn(),
