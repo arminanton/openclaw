@@ -4704,6 +4704,9 @@ export const GENERATED_BASE_CONFIG_SCHEMA: BaseConfigSchemaResponse = {
                     const: "full",
                   },
                 ],
+                title: "Default Response Usage Footer",
+                description:
+                  "Default response-usage footer mode inherited by sessions that do not set responseUsage explicitly: \"off\", \"tokens\", or \"full\". Use this to enable fleet-wide inline usage/context summaries while still allowing sessions to override or explicitly suppress them.",
               },
               elevatedDefault: {
                 anyOf: [
@@ -17904,13 +17907,13 @@ export const GENERATED_BASE_CONFIG_SCHEMA: BaseConfigSchemaResponse = {
             type: "string",
             title: "Outbound Response Prefix",
             description:
-              "Prefix text prepended to outbound assistant replies before sending to channels. Use for lightweight branding/context tags and avoid long prefixes that reduce content density.",
+              "Prefix text prepended to outbound assistant replies before sending to channels. Supports the same template placeholders as messages.responseFooter, including late-bound model, usage, context, and cost values when they are available by final-send time; keep it short so streaming replies still read naturally.",
           },
           responseFooter: {
             type: "string",
             title: "Outbound Response Footer",
             description:
-              "Footer text appended to outbound assistant replies after the main body. Use for lightweight signatures, inline usage/context summaries, or compliance notes; keep it short so it does not overwhelm the reply.",
+              "Footer text appended to outbound assistant replies after the main body. Use it for lightweight signatures, inline usage/context summaries, or compliance notes, and keep it short so it does not overwhelm the reply; when the footer already references usage-style placeholders, OpenClaw suppresses the separate built-in usage line to avoid duplicate footers.",
           },
           groupChat: {
             type: "object",
@@ -26701,7 +26704,7 @@ export const GENERATED_BASE_CONFIG_SCHEMA: BaseConfigSchemaResponse = {
     },
     "messages.responseFooter": {
       label: "Outbound Response Footer",
-      help: "Footer text appended to outbound assistant replies after the main body. Supports lightweight signatures plus template placeholders for model, usage, context-window, session, and estimated cost details; when the footer already references usage-style placeholders, OpenClaw suppresses the separate built-in usage line to avoid duplicate footers.",
+      help: "Footer text appended to outbound assistant replies after the main body. Use it for lightweight signatures, inline usage/context summaries, or compliance notes, and keep it short so it does not overwhelm the reply; when the footer already references usage-style placeholders, OpenClaw suppresses the separate built-in usage line to avoid duplicate footers.",
       tags: ["advanced"],
     },
     "messages.groupChat": {

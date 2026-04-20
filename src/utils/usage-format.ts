@@ -7,7 +7,6 @@ import type { ModelProviderConfig } from "../config/types.models.js";
 import type { OpenClawConfig } from "../config/types.openclaw.js";
 import { getCachedGatewayModelPricing } from "../gateway/model-pricing-cache.js";
 import { normalizeOptionalString } from "../shared/string-coerce.js";
-export { formatTokenCount, formatUsd } from "./usage-format-shared.js";
 
 export type ModelCostConfig = {
   input: number;
@@ -33,6 +32,8 @@ type ModelsJsonCostCache = {
 };
 
 let modelsJsonCostCache: ModelsJsonCostCache | null = null;
+
+export { formatTokenCount, formatUsd } from "./usage-format-shared.js";
 
 function toResolvedModelKey(params: {
   provider?: string;

@@ -1519,7 +1519,7 @@ export const FIELD_HELP: Record<string, string> = {
   "messages.responsePrefix":
     "Prefix text prepended to outbound assistant replies before sending to channels. Supports the same template placeholders as messages.responseFooter, including late-bound model, usage, context, and cost values when they are available by final-send time; keep it short so streaming replies still read naturally.",
   "messages.responseFooter":
-    "Footer text appended to outbound assistant replies after the main body. Supports lightweight signatures plus template placeholders for model, usage, context-window, session, and estimated cost details; when the footer already references usage-style placeholders, OpenClaw suppresses the separate built-in usage line to avoid duplicate footers.",
+    "Footer text appended to outbound assistant replies after the main body. Use it for lightweight signatures, inline usage/context summaries, or compliance notes, and keep it short so it does not overwhelm the reply; when the footer already references usage-style placeholders, OpenClaw suppresses the separate built-in usage line to avoid duplicate footers.",
   "messages.groupChat":
     "Group-message handling controls including mention triggers and history window sizing. Keep mention patterns narrow so group channels do not trigger on every message.",
   "messages.groupChat.mentionPatterns":

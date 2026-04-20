@@ -100,7 +100,6 @@ export function describeBundledWebSearchFastPathContract(pluginId: string) {
         origin: "bundled",
         onlyPluginIds: [pluginId],
       }).filter((provider) => provider.pluginId === pluginId);
-
       const bundledProviderEntries = loadBundledCapabilityRuntimeRegistry({
         pluginIds: [pluginId],
         pluginSdkResolution: "dist",

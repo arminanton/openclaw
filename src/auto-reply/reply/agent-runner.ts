@@ -1029,7 +1029,8 @@ export async function runReplyAgent(params: {
     return undefined;
   }
 
-  followupRun.run.config = await resolveQueuedReplyExecutionConfig(followupRun.run.config, {
+  const queuedRunConfig = followupRun.run.config;
+  followupRun.run.config = await resolveQueuedReplyExecutionConfig(queuedRunConfig, {
     originatingChannel: sessionCtx.OriginatingChannel,
     messageProvider: followupRun.run.messageProvider,
     originatingAccountId: followupRun.originatingAccountId,
@@ -1453,15 +1454,22 @@ export async function runReplyAgent(params: {
       });
     }
 
-    const responseUsageDefaultRaw = cfg.agents?.defaults?.responseUsage;
+    const responseUsageDefaultRaw =
+      cfg.agents?.defaults?.responseUsage ??
+      queuedRunConfig.agents?.defaults?.responseUsage;
     const responseUsageRaw =
       activeSessionEntry?.responseUsage ??
       (sessionKey ? activeSessionStore?.[sessionKey]?.responseUsage : undefined);
     const responseUsageMode = resolveResponseUsageMode(responseUsageRaw, responseUsageDefaultRaw);
-    const responseFooterTemplate = normalizeOptionalString(cfg.messages?.responseFooter);
+
+    const responseFooterTemplate =
+      normalizeOptionalString(cfg.messages?.responseFooter) ??
+      normalizeOptionalString(queuedRunConfig.messages?.responseFooter);
     const shouldResolveFooter = responseFooterTemplate !== undefined;
     const shouldResolveLateTemplateContext =
-      shouldResolveFooter || responseUsageMode !== "off" || Boolean(opts?.onResponseTemplateContextResolved);
+      shouldResolveFooter ||
+      responseUsageMode !== "off" ||
+      Boolean(opts?.onResponseTemplateContextResolved);
 
     if (
       verboseEnabled ||
@@ -1682,9 +1690,9 @@ export async function runReplyAgent(params: {
       traceAuthorized &&
       (activeSessionEntry?.traceLevel === "on" || activeSessionEntry?.traceLevel === "raw");
     const shouldAppendTracePayload = verboseEnabled || traceEnabledForSender;
-    const identityName = normalizeOptionalString(
-      resolveAgentIdentity(cfg, followupRun.run.agentId)?.name,
-    );
+    const identityName =
+      normalizeOptionalString(resolveAgentIdentity(cfg, followupRun.run.agentId)?.name) ??
+      normalizeOptionalString(resolveAgentIdentity(queuedRunConfig, followupRun.run.agentId)?.name);
     let footerBlockToAppend: string | undefined;
     if (shouldResolveLateTemplateContext) {
       const inputTokens = typeof usage?.input === "number" ? usage.input : undefined;
@@ -1781,12 +1789,14 @@ export async function runReplyAgent(params: {
       if (opts?.onResponseTemplateContextResolved) {
         opts.onResponseTemplateContextResolved(responseTemplateContext);
       }
+
       const responseFooterBlock = shouldResolveFooter
         ? (formatResponseFooterBlock({
             template: responseFooterTemplate,
             context: responseTemplateContext,
           }) ?? undefined)
         : undefined;
+
       footerBlockToAppend =
         composeFooterBlock({
           usageLine: responseUsageMode !== "off" ? responseUsageLine : undefined,

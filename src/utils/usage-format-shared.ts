@@ -1,4 +1,3 @@
-// src/utils/usage-format-shared.ts
 export function formatTokenCount(value?: number): string {
   if (value === undefined || !Number.isFinite(value)) {
     return "0";
