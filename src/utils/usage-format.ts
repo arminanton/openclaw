@@ -348,10 +348,10 @@ export function estimateUsageCost(params: {
     total = computeTieredCost(cost.tieredPricing, input, output, cacheRead, cacheWrite);
   } else {
     total =
-    input * cost.input +
-    output * cost.output +
-    cacheRead * cost.cacheRead +
-    cacheWrite * cost.cacheWrite;
+      input * cost.input +
+      output * cost.output +
+      cacheRead * cost.cacheRead +
+      cacheWrite * cost.cacheWrite;
   }
 
   if (!Number.isFinite(total)) {
