@@ -124,7 +124,7 @@ export async function recordInboundSessionAndDispatchReply(params: {
     onRecordError: params.onRecordError,
   });
 
-  const { onModelSelected, ...replyPipeline } = createChannelReplyPipeline({
+  const { onModelSelected, onResponseTemplateContextResolved, ...replyPipeline } = createChannelReplyPipeline({
     cfg: params.cfg,
     agentId: params.agentId,
     channel: params.channel,
@@ -143,6 +143,7 @@ export async function recordInboundSessionAndDispatchReply(params: {
     replyOptions: {
       ...params.replyOptions,
       onModelSelected,
+      onResponseTemplateContextResolved,
     },
   });
 }

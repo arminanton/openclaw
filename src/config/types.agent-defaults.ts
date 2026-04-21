@@ -284,6 +284,8 @@ export type AgentDefaultsConfig = {
   thinkingDefault?: "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "adaptive";
   /** Default verbose level when no /verbose directive is present. */
   verboseDefault?: "off" | "on" | "full";
+  /** Default response usage footer mode for new and inherited sessions. */
+  responseUsage?: "off" | "tokens" | "full";
   /** Default elevated level when no /elevated directive is present. */
   elevatedDefault?: "off" | "on" | "ask" | "full";
   /** Default block streaming level when no override is present. */
