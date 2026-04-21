@@ -11,6 +11,13 @@ import { findLegacyConfigIssues } from "./legacy.js";
 import { buildWebSearchProviderConfig, withTempHome, writeOpenClawConfig } from "./test-helpers.js";
 import { validateConfigObject, validateConfigObjectRaw } from "./validation.js";
 import { OpenClawSchema } from "./zod-schema.js";
+import {
+  DiscordConfigSchema,
+  IMessageConfigSchema,
+  SignalConfigSchema,
+  TelegramConfigSchema,
+} from "./zod-schema.providers-core.js";
+import { WhatsAppConfigSchema } from "./zod-schema.providers-whatsapp.js";
 
 describe("$schema key in config (#14998)", () => {
   it("accepts config with $schema string", () => {
@@ -354,7 +361,7 @@ describe("gateway.channelHealthCheckMinutes", () => {
 });
 
 describe("config identity/materialization regressions", () => {
-  it("keeps explicit responsePrefix and group mention patterns", () => {
+  it("keeps explicit response prefix/footer and group mention patterns", () => {
     const res = validateConfigObject({
       agents: {
         list: [
@@ -371,15 +378,33 @@ describe("config identity/materialization regressions", () => {
       },
       messages: {
         responsePrefix: "✅",
+        responseFooter: "— footer",
       },
     });
 
     expect(res.ok).toBe(true);
     if (res.ok) {
       expect(res.config.messages?.responsePrefix).toBe("✅");
+      expect(res.config.messages?.responseFooter).toBe("— footer");
       expect(res.config.agents?.list?.[0]?.groupChat?.mentionPatterns).toEqual(["@openclaw"]);
     }
   });
+
+  it("keeps default responseUsage materialized under agents.defaults", () => {
+    const res = validateConfigObject({
+      agents: {
+        defaults: {
+          responseUsage: "full",
+        },
+      },
+    });
+
+    expect(res.ok).toBe(true);
+    if (res.ok) {
+      expect(res.config.agents?.defaults?.responseUsage).toBe("full");
+    }
+  });
+
 
   it("preserves empty responsePrefix when identity is present", () => {
     const res = validateConfigObject({
@@ -495,6 +520,58 @@ describe("cron webhook schema", () => {
       },
     });
     expect(res.success).toBe(true);
+  });
+
+  it("accepts channel textChunkLimit config without reviving legacy message limits", () => {
+    const whatsapp = WhatsAppConfigSchema.safeParse({
+      allowFrom: ["+15555550123"],
+      textChunkLimit: 4444,
+    });
+    const telegram = TelegramConfigSchema.safeParse({
+      enabled: true,
+      textChunkLimit: 3333,
+    });
+    const discord = DiscordConfigSchema.safeParse({
+      enabled: true,
+      textChunkLimit: 1999,
+      maxLinesPerMessage: 17,
+    });
+    const signal = SignalConfigSchema.safeParse({
+      enabled: true,
+      textChunkLimit: 2222,
+    });
+    const imessage = IMessageConfigSchema.safeParse({
+      enabled: true,
+      textChunkLimit: 1111,
+    });
+    const messages = {
+      messagePrefix: "[openclaw]",
+      responsePrefix: "🦞",
+    };
+
+    expect(whatsapp.success).toBe(true);
+    expect(telegram.success).toBe(true);
+    expect(discord.success).toBe(true);
+    expect(signal.success).toBe(true);
+    expect(imessage.success).toBe(true);
+    if (whatsapp.success) {
+      expect(whatsapp.data.textChunkLimit).toBe(4444);
+    }
+    if (telegram.success) {
+      expect(telegram.data.textChunkLimit).toBe(3333);
+    }
+    if (discord.success) {
+      expect(discord.data.textChunkLimit).toBe(1999);
+      expect(discord.data.maxLinesPerMessage).toBe(17);
+    }
+    if (signal.success) {
+      expect(signal.data.textChunkLimit).toBe(2222);
+    }
+    if (imessage.success) {
+      expect(imessage.data.textChunkLimit).toBe(1111);
+    }
+    const legacy = messages as unknown as Record<string, unknown>;
+    expect(legacy.textChunkLimit).toBeUndefined();
   });
 });
 
