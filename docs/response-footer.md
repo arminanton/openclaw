@@ -54,7 +54,7 @@ OpenClaw now supports two coordinated ways to surface response usage:
 ### Composition rules
 
 - If the configured footer is static and `/usage` is enabled, OpenClaw folds the built-in usage line and the footer into one appended block.
-- If the configured footer already references usage-style placeholders such as `{input}`, `{contextPercent}`, or `{usageLine}`, OpenClaw suppresses the separate built-in usage line to avoid duplicate footer lines. Cost-only footers still compose with the built-in usage line unless you explicitly include `{usageLine}` in the template.
+- If the configured footer already references usage-style placeholders such as `{input}`, `{contextPercent}`, `{usage}`, or `{usageLine}`, OpenClaw suppresses the separate built-in usage line to avoid duplicate footer lines. Cost-only footers still compose with the built-in usage line unless you explicitly include `{usage}` or `{usageLine}` in the template.
 - A session can still explicitly set `responseUsage: "off"` to suppress an inherited default from `agents.defaults.responseUsage`.
 
 ## Notes
