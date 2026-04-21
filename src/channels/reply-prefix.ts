@@ -8,17 +8,21 @@ import type { OpenClawConfig } from "../config/types.openclaw.js";
 import { normalizeOptionalString } from "../shared/string-coerce.js";
 
 type ModelSelectionContext = Parameters<NonNullable<GetReplyOptions["onModelSelected"]>>[0];
+type ResponseTemplateResolvedContext = Parameters<
+  NonNullable<GetReplyOptions["onResponseTemplateContextResolved"]>
+>[0];
 
 export type ReplyPrefixContextBundle = {
   prefixContext: ResponsePrefixContext;
   responsePrefix?: string;
   responsePrefixContextProvider: () => ResponsePrefixContext;
   onModelSelected: (ctx: ModelSelectionContext) => void;
+  onResponseTemplateContextResolved: (ctx: ResponseTemplateResolvedContext) => void;
 };
 
 export type ReplyPrefixOptions = Pick<
   ReplyPrefixContextBundle,
-  "responsePrefix" | "responsePrefixContextProvider" | "onModelSelected"
+  "responsePrefix" | "responsePrefixContextProvider" | "onModelSelected" | "onResponseTemplateContextResolved"
 >;
 
 export function createReplyPrefixContext(params: {
@@ -40,6 +44,10 @@ export function createReplyPrefixContext(params: {
     prefixContext.thinkingLevel = ctx.thinkLevel ?? "off";
   };
 
+  const onResponseTemplateContextResolved = (ctx: ResponseTemplateResolvedContext) => {
+    Object.assign(prefixContext, ctx);
+  };
+
   return {
     prefixContext,
     responsePrefix: resolveEffectiveMessagesConfig(cfg, agentId, {
@@ -48,6 +56,7 @@ export function createReplyPrefixContext(params: {
     }).responsePrefix,
     responsePrefixContextProvider: () => prefixContext,
     onModelSelected,
+    onResponseTemplateContextResolved,
   };
 }
 
@@ -57,11 +66,16 @@ export function createReplyPrefixOptions(params: {
   channel?: string;
   accountId?: string;
 }): ReplyPrefixOptions {
-  const { responsePrefix, responsePrefixContextProvider, onModelSelected } =
-    createReplyPrefixContext(params);
+  const {
+    responsePrefix,
+    responsePrefixContextProvider,
+    onModelSelected,
+    onResponseTemplateContextResolved,
+  } = createReplyPrefixContext(params);
   return {
     responsePrefix,
     responsePrefixContextProvider,
     onModelSelected,
+    onResponseTemplateContextResolved,
   };
 }

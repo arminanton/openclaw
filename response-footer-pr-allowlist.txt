@@ -1,0 +1,40 @@
+# Final response-footer PR allowlist
+# Copy only these paths from feat/response-footer-templates onto a fresh branch from upstream/main.
+# Then regenerate src/config/schema.base.generated.ts on the fresh branch.
+
+docs/response-footer.md
+src/auto-reply/get-reply-options.types.ts
+src/auto-reply/reply/agent-runner-usage-line.footer.test.ts
+src/auto-reply/reply/agent-runner-usage-line.ts
+src/auto-reply/reply/agent-runner.misc.runreplyagent.test.ts
+src/auto-reply/reply/agent-runner.ts
+src/auto-reply/reply/commands-session-usage.test.ts
+src/auto-reply/reply/commands-session.ts
+src/auto-reply/reply/reply-utils.test.ts
+src/auto-reply/reply/response-prefix-template.ts
+src/auto-reply/thinking.shared.ts
+src/channels/reply-prefix.ts
+src/config/config-misc.test.ts
+src/config/runtime-overrides.test.ts
+src/config/schema.help.quality.test.ts
+src/config/schema.help.ts
+src/config/schema.labels.ts
+src/config/types.agent-defaults.ts
+src/config/types.messages.ts
+src/config/zod-schema.agent-defaults.test.ts
+src/config/zod-schema.agent-defaults.ts
+src/config/zod-schema.session.ts
+src/gateway/server-methods/chat.ts
+src/gateway/session-utils.ts
+src/gateway/sessions-patch.ts
+src/plugin-sdk/channel-reply-pipeline.test.ts
+src/plugin-sdk/inbound-reply-dispatch.ts
+src/tui/tui-command-handlers.test.ts
+src/tui/tui-command-handlers.ts
+
+# Late-delta additions/fixes
+src/utils/usage-format-shared.ts
+src/utils/usage-format.ts
+
+# Regenerate on fresh branch; do not blindly copy old generated snapshot
+# src/config/schema.base.generated.ts

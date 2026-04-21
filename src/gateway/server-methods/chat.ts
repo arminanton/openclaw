@@ -2030,7 +2030,7 @@ export const chatHandlers: GatewayRequestHandlers = {
         GatewayClientScopes: client?.connect?.scopes ?? [],
       };
 
-      const { onModelSelected, ...replyPipeline } = createChannelReplyPipeline({
+      const { onModelSelected, onResponseTemplateContextResolved, ...replyPipeline } = createChannelReplyPipeline({
         cfg,
         agentId,
         channel: INTERNAL_MESSAGE_CHANNEL,
@@ -2198,6 +2198,7 @@ export const chatHandlers: GatewayRequestHandlers = {
             }
           },
           onModelSelected,
+          onResponseTemplateContextResolved,
         },
       })
         .then(async () => {
