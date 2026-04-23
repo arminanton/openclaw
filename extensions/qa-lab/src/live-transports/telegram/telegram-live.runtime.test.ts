@@ -66,6 +66,51 @@ describe("telegram live qa runtime", () => {
     ).toThrow("OPENCLAW_QA_TELEGRAM_GROUP_ID must be a numeric Telegram chat id.");
   });
 
+  it("parses Telegram live progress env booleans", () => {
+    expect(__testing.parseTelegramQaProgressBooleanEnv("true")).toBe(true);
+    expect(__testing.parseTelegramQaProgressBooleanEnv("on")).toBe(true);
+    expect(__testing.parseTelegramQaProgressBooleanEnv("false")).toBe(false);
+    expect(__testing.parseTelegramQaProgressBooleanEnv("off")).toBe(false);
+    expect(__testing.parseTelegramQaProgressBooleanEnv("maybe")).toBeUndefined();
+  });
+
+  it("defaults Telegram live progress logging from CI when no override is set", () => {
+    expect(__testing.shouldLogTelegramQaLiveProgress({ CI: "true" })).toBe(true);
+    expect(__testing.shouldLogTelegramQaLiveProgress({ CI: "false" })).toBe(false);
+  });
+
+  it("applies OPENCLAW_QA_SUITE_PROGRESS override to Telegram live logging", () => {
+    expect(
+      __testing.shouldLogTelegramQaLiveProgress({
+        CI: "false",
+        OPENCLAW_QA_SUITE_PROGRESS: "true",
+      }),
+    ).toBe(true);
+    expect(
+      __testing.shouldLogTelegramQaLiveProgress({
+        CI: "true",
+        OPENCLAW_QA_SUITE_PROGRESS: "false",
+      }),
+    ).toBe(false);
+    expect(
+      __testing.shouldLogTelegramQaLiveProgress({
+        CI: "true",
+        OPENCLAW_QA_SUITE_PROGRESS: "definitely",
+      }),
+    ).toBe(true);
+  });
+
+  it("sanitizes and truncates Telegram live progress details", () => {
+    expect(__testing.sanitizeTelegramQaProgressValue("scenario\nid\tvalue")).toBe(
+      "scenario id value",
+    );
+    expect(__testing.sanitizeTelegramQaProgressValue("\u0000\u0001")).toBe("<empty>");
+    const details = __testing.formatTelegramQaProgressDetails(`header\n${"x".repeat(500)}`);
+    expect(details.startsWith("header ")).toBe(true);
+    expect(details.length).toBeLessThanOrEqual(240);
+    expect(details.endsWith("...")).toBe(true);
+  });
+
   it("parses Telegram pooled credential payloads", () => {
     expect(
       __testing.parseTelegramQaCredentialPayload({
@@ -436,7 +481,7 @@ describe("telegram live qa runtime", () => {
     ]);
   });
 
-  it("redacts observed message metadata in public mode even when content capture is requested", () => {
+  it("keeps observed message content in public mode when capture is requested", () => {
     const redacted = __testing.buildObservedMessagesArtifact({
       includeContent: true,
       redactMetadata: true,
@@ -463,12 +508,14 @@ describe("telegram live qa runtime", () => {
         senderIsBot: true,
         inlineButtonCount: 1,
         mediaKinds: ["photo"],
+        text: "secret text",
+        caption: "secret caption",
       },
     ]);
     expect(redacted[0]).not.toHaveProperty("timestamp");
     expect(redacted[0]).not.toHaveProperty("inlineButtons");
-    expect(redacted[0]).not.toHaveProperty("text");
-    expect(redacted[0]).not.toHaveProperty("caption");
+    expect(redacted[0]).not.toHaveProperty("senderId");
+    expect(redacted[0]).not.toHaveProperty("senderUsername");
   });
 
   it("keeps raw timestamp and inline button text when metadata redaction is disabled", () => {
@@ -507,6 +554,42 @@ describe("telegram live qa runtime", () => {
         text: "secret text",
         caption: "secret caption",
         mediaKinds: ["photo"],
+      },
+    ]);
+  });
+
+  it("adds scenario context to observed message artifacts", () => {
+    expect(
+      __testing.buildObservedMessagesArtifact({
+        includeContent: false,
+        redactMetadata: true,
+        observedMessages: [
+          {
+            updateId: 11,
+            messageId: 21,
+            chatId: -100123,
+            senderId: 88,
+            senderIsBot: true,
+            senderUsername: "sut_bot",
+            scenarioId: "telegram-commands-command",
+            scenarioTitle: "Telegram commands list reply",
+            matchedScenario: false,
+            text: "noise from previous turn",
+            replyToMessageId: 19,
+            timestamp: 1_700_000_003_000,
+            inlineButtons: [],
+            mediaKinds: [],
+          },
+        ],
+      }),
+    ).toEqual([
+      {
+        scenarioId: "telegram-commands-command",
+        scenarioTitle: "Telegram commands list reply",
+        matchedScenario: false,
+        senderIsBot: true,
+        inlineButtonCount: 0,
+        mediaKinds: [],
       },
     ]);
   });
@@ -566,6 +649,7 @@ describe("telegram live qa runtime", () => {
     expect(message).toContain("- sutBotId: <redacted>");
     expect(message).toContain("- sutUsername: <redacted>");
     expect(message).toContain("- driverMessageId: <redacted>");
+    expect(message).toContain("timed out");
     expect(message).not.toContain("-100123");
     expect(message).not.toContain("driver_bot");
     expect(message).not.toContain("sut_bot");

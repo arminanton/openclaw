@@ -65,6 +65,9 @@ type TelegramObservedMessage = {
   senderId: number;
   senderIsBot: boolean;
   senderUsername?: string;
+  scenarioId?: string;
+  scenarioTitle?: string;
+  matchedScenario?: boolean;
   text: string;
   caption?: string;
   replyToMessageId?: number;
@@ -80,6 +83,9 @@ type TelegramObservedMessageArtifact = {
   senderId?: number;
   senderIsBot: boolean;
   senderUsername?: string;
+  scenarioId?: string;
+  scenarioTitle?: string;
+  matchedScenario?: boolean;
   text?: string;
   caption?: string;
   replyToMessageId?: number;
@@ -217,7 +223,7 @@ const TELEGRAM_QA_SCENARIOS: TelegramQaScenarioDefinition[] = [
     buildRun: (sutUsername) => ({
       expectReply: true,
       input: `/commands@${sutUsername}`,
-      expectedTextIncludes: ["/help", "More: /tools for available capabilities"],
+      expectedTextIncludes: ["Commands (1/", "/session", "/verbose"],
     }),
   },
   {
@@ -292,6 +298,9 @@ const TELEGRAM_QA_ENV_KEYS = [
 ] as const;
 const TELEGRAM_QA_CAPTURE_CONTENT_ENV = "OPENCLAW_QA_TELEGRAM_CAPTURE_CONTENT";
 const QA_REDACT_PUBLIC_METADATA_ENV = "OPENCLAW_QA_REDACT_PUBLIC_METADATA";
+const QA_SUITE_PROGRESS_ENV = "OPENCLAW_QA_SUITE_PROGRESS";
+const TELEGRAM_QA_PROGRESS_DETAIL_LIMIT = 240;
+const TELEGRAM_QA_PROGRESS_PREFIX = "[qa-telegram-live]";
 
 const telegramQaCredentialPayloadSchema = z.object({
   groupId: z.string().trim().min(1),
@@ -310,6 +319,57 @@ function resolveEnvValue(env: NodeJS.ProcessEnv, key: (typeof TELEGRAM_QA_ENV_KE
 function isTruthyOptIn(value: string | undefined) {
   const normalized = value?.trim().toLowerCase();
   return normalized === "1" || normalized === "true" || normalized === "yes";
+}
+
+function parseTelegramQaProgressBooleanEnv(value: string | undefined): boolean | undefined {
+  const normalized = value?.trim().toLowerCase();
+  if (!normalized) {
+    return undefined;
+  }
+  if (normalized === "1" || normalized === "true" || normalized === "yes" || normalized === "on") {
+    return true;
+  }
+  if (normalized === "0" || normalized === "false" || normalized === "no" || normalized === "off") {
+    return false;
+  }
+  return undefined;
+}
+
+function shouldLogTelegramQaLiveProgress(env: NodeJS.ProcessEnv = process.env) {
+  const override = parseTelegramQaProgressBooleanEnv(env[QA_SUITE_PROGRESS_ENV]);
+  if (override !== undefined) {
+    return override;
+  }
+  return parseTelegramQaProgressBooleanEnv(env.CI) === true;
+}
+
+function writeTelegramQaProgress(enabled: boolean, message: string) {
+  if (!enabled) {
+    return;
+  }
+  process.stderr.write(`${TELEGRAM_QA_PROGRESS_PREFIX} ${message}\n`);
+}
+
+function sanitizeTelegramQaProgressValue(value: string): string {
+  let normalized = "";
+  for (const char of value) {
+    const code = char.codePointAt(0);
+    if (code === undefined) {
+      continue;
+    }
+    const isControl = code <= 0x1f || (code >= 0x7f && code <= 0x9f);
+    normalized += isControl ? " " : char;
+  }
+  normalized = normalized.replace(/\s+/gu, " ").trim();
+  return normalized.length > 0 ? normalized : "<empty>";
+}
+
+function formatTelegramQaProgressDetails(details: string): string {
+  const sanitized = sanitizeTelegramQaProgressValue(details);
+  if (sanitized.length <= TELEGRAM_QA_PROGRESS_DETAIL_LIMIT) {
+    return sanitized;
+  }
+  return `${sanitized.slice(0, TELEGRAM_QA_PROGRESS_DETAIL_LIMIT - 3).trimEnd()}...`;
 }
 
 export function resolveTelegramQaRuntimeEnv(
@@ -509,6 +569,8 @@ async function waitForObservedMessage(params: {
   timeoutMs: number;
   predicate: (message: TelegramObservedMessage) => boolean;
   observedMessages: TelegramObservedMessage[];
+  observationScenarioId: string;
+  observationScenarioTitle: string;
 }) {
   const startedAt = Date.now();
   let offset = params.initialOffset;
@@ -537,9 +599,16 @@ async function waitForObservedMessage(params: {
       if (!normalized) {
         continue;
       }
-      params.observedMessages.push(normalized);
-      if (params.predicate(normalized)) {
-        return { message: normalized, nextOffset: offset };
+      const matchedScenario = params.predicate(normalized);
+      const observedMessage: TelegramObservedMessage = {
+        ...normalized,
+        scenarioId: params.observationScenarioId,
+        scenarioTitle: params.observationScenarioTitle,
+        matchedScenario,
+      };
+      params.observedMessages.push(observedMessage);
+      if (matchedScenario) {
+        return { message: observedMessage, nextOffset: offset };
       }
     }
   }
@@ -621,13 +690,22 @@ function buildObservedMessagesArtifact(params: {
   redactMetadata: boolean;
 }) {
   return params.observedMessages.map<TelegramObservedMessageArtifact>((message) => {
+    const scenarioContext = {
+      ...(message.scenarioId ? { scenarioId: message.scenarioId } : {}),
+      ...(message.scenarioTitle ? { scenarioTitle: message.scenarioTitle } : {}),
+      ...(typeof message.matchedScenario === "boolean"
+        ? { matchedScenario: message.matchedScenario }
+        : {}),
+    };
     const base = params.redactMetadata
       ? {
+          ...scenarioContext,
           senderIsBot: message.senderIsBot,
           inlineButtonCount: message.inlineButtons.length,
           mediaKinds: message.mediaKinds,
         }
       : {
+          ...scenarioContext,
           senderIsBot: message.senderIsBot,
           timestamp: message.timestamp,
           inlineButtons: message.inlineButtons,
@@ -639,7 +717,7 @@ function buildObservedMessagesArtifact(params: {
           senderUsername: message.senderUsername,
           replyToMessageId: message.replyToMessageId,
         };
-    if (!params.includeContent || params.redactMetadata) {
+    if (!params.includeContent) {
       return base;
     }
     return {
@@ -733,6 +811,8 @@ async function runCanary(params: {
       initialOffset: offset,
       timeoutMs: 30_000,
       observedMessages: params.observedMessages,
+      observationScenarioId: "telegram-canary",
+      observationScenarioTitle: "Telegram canary",
       predicate: (message) => {
         const classification = classifyCanaryReply({
           message,
@@ -803,9 +883,7 @@ function canaryFailureMessage(params: {
   sutUsername: string;
 }) {
   const error = params.error;
-  const details = params.redactMetadata
-    ? "details redacted (OPENCLAW_QA_REDACT_PUBLIC_METADATA=1)"
-    : formatErrorMessage(error);
+  const details = formatErrorMessage(error);
   const phase = isTelegramQaCanaryError(error) ? error.phase : "unknown";
   const canonicalContext = new Set([
     "groupId",
@@ -884,6 +962,19 @@ export async function runTelegramQaLive(params: {
     path.join(repoRoot, ".artifacts", "qa-e2e", `telegram-${Date.now().toString(36)}`);
   await fs.mkdir(outputDir, { recursive: true });
 
+  const providerMode = normalizeQaProviderMode(
+    params.providerMode ?? DEFAULT_QA_LIVE_PROVIDER_MODE,
+  );
+  const primaryModel = params.primaryModel?.trim() || defaultQaModelForMode(providerMode);
+  const alternateModel = params.alternateModel?.trim() || defaultQaModelForMode(providerMode, true);
+  const sutAccountId = params.sutAccountId?.trim() || "sut";
+  const scenarios = findScenario(params.scenarioIds);
+  const progressEnabled = shouldLogTelegramQaLiveProgress();
+  writeTelegramQaProgress(
+    progressEnabled,
+    `run start: scenarios=${scenarios.length} providerMode=${providerMode} fastMode=${params.fastMode === true ? "on" : "off"}`,
+  );
+
   const credentialLease = await acquireQaCredentialLease({
     kind: "telegram",
     source: params.credentialSource,
@@ -895,19 +986,19 @@ export async function runTelegramQaLive(params: {
   const assertLeaseHealthy = () => {
     leaseHeartbeat.throwIfFailed();
   };
+  writeTelegramQaProgress(
+    progressEnabled,
+    `credentials ready: source=${credentialLease.source} role=${credentialLease.role ?? "<none>"}`,
+  );
 
   const runtimeEnv = credentialLease.payload;
-  const providerMode = normalizeQaProviderMode(
-    params.providerMode ?? DEFAULT_QA_LIVE_PROVIDER_MODE,
-  );
-  const primaryModel = params.primaryModel?.trim() || defaultQaModelForMode(providerMode);
-  const alternateModel = params.alternateModel?.trim() || defaultQaModelForMode(providerMode, true);
-  const sutAccountId = params.sutAccountId?.trim() || "sut";
-  const scenarios = findScenario(params.scenarioIds);
   const observedMessages: TelegramObservedMessage[] = [];
   const redactPublicMetadata = isTruthyOptIn(process.env[QA_REDACT_PUBLIC_METADATA_ENV]);
-  const includeObservedMessageContent =
-    !redactPublicMetadata && isTruthyOptIn(process.env[TELEGRAM_QA_CAPTURE_CONTENT_ENV]);
+  const includeObservedMessageContent = isTruthyOptIn(process.env[TELEGRAM_QA_CAPTURE_CONTENT_ENV]);
+  writeTelegramQaProgress(
+    progressEnabled,
+    `runtime: redactMetadata=${redactPublicMetadata ? "on" : "off"} captureContent=${includeObservedMessageContent ? "on" : "off"}`,
+  );
   const startedAt = new Date().toISOString();
   const scenarioResults: TelegramQaScenarioResult[] = [];
   const cleanupIssues: string[] = [];
@@ -953,6 +1044,7 @@ export async function runTelegramQaLive(params: {
       await waitForTelegramChannelRunning(gatewayHarness.gateway, sutAccountId);
       assertLeaseHealthy();
       try {
+        writeTelegramQaProgress(progressEnabled, "canary start");
         await runCanary({
           driverToken: runtimeEnv.driverToken,
           groupId: runtimeEnv.groupId,
@@ -960,6 +1052,7 @@ export async function runTelegramQaLive(params: {
           sutBotId: sutIdentity.id,
           observedMessages,
         });
+        writeTelegramQaProgress(progressEnabled, "canary pass");
       } catch (error) {
         canaryFailure = canaryFailureMessage({
           error,
@@ -976,11 +1069,21 @@ export async function runTelegramQaLive(params: {
           status: "fail",
           details: canaryFailure,
         });
+        writeTelegramQaProgress(
+          progressEnabled,
+          `canary fail: details=${formatTelegramQaProgressDetails(canaryFailure)}`,
+        );
       }
       assertLeaseHealthy();
       if (!canaryFailure) {
         let driverOffset = await flushTelegramUpdates(runtimeEnv.driverToken);
-        for (const scenario of scenarios) {
+        for (const [scenarioIndex, scenario] of scenarios.entries()) {
+          const scenarioIndexLabel = `${scenarioIndex + 1}/${scenarios.length}`;
+          const scenarioIdForLog = sanitizeTelegramQaProgressValue(scenario.id);
+          writeTelegramQaProgress(
+            progressEnabled,
+            `scenario start ${scenarioIndexLabel}: ${scenarioIdForLog}`,
+          );
           assertLeaseHealthy();
           const scenarioRun = scenario.buildRun(sutUsername);
           try {
@@ -994,6 +1097,8 @@ export async function runTelegramQaLive(params: {
               initialOffset: driverOffset,
               timeoutMs: scenario.timeoutMs,
               observedMessages,
+              observationScenarioId: scenario.id,
+              observationScenarioTitle: scenario.title,
               predicate: (message) =>
                 matchesTelegramScenarioReply({
                   groupId: runtimeEnv.groupId,
@@ -1011,37 +1116,50 @@ export async function runTelegramQaLive(params: {
               expectedTextIncludes: scenarioRun.expectedTextIncludes,
               message: matched.message,
             });
-            scenarioResults.push({
+            const result = {
               id: scenario.id,
               title: scenario.title,
               status: "pass",
               details: redactPublicMetadata
                 ? "reply matched"
                 : `reply message ${matched.message.messageId} matched`,
-            });
+            } satisfies TelegramQaScenarioResult;
+            scenarioResults.push(result);
+            writeTelegramQaProgress(
+              progressEnabled,
+              `scenario pass ${scenarioIndexLabel}: ${scenarioIdForLog}`,
+            );
           } catch (error) {
             if (!scenarioRun.expectReply) {
               const details = formatErrorMessage(error);
               if (
                 details === `timed out after ${scenario.timeoutMs}ms waiting for Telegram message`
               ) {
-                scenarioResults.push({
+                const result = {
                   id: scenario.id,
                   title: scenario.title,
                   status: "pass",
                   details: "no reply",
-                });
+                } satisfies TelegramQaScenarioResult;
+                scenarioResults.push(result);
+                writeTelegramQaProgress(
+                  progressEnabled,
+                  `scenario pass ${scenarioIndexLabel}: ${scenarioIdForLog}`,
+                );
                 continue;
               }
             }
-            scenarioResults.push({
+            const result = {
               id: scenario.id,
               title: scenario.title,
               status: "fail",
-              details: redactPublicMetadata
-                ? "details redacted (OPENCLAW_QA_REDACT_PUBLIC_METADATA=1)"
-                : formatErrorMessage(error),
-            });
+              details: formatErrorMessage(error),
+            } satisfies TelegramQaScenarioResult;
+            scenarioResults.push(result);
+            writeTelegramQaProgress(
+              progressEnabled,
+              `scenario fail ${scenarioIndexLabel}: ${scenarioIdForLog} details=${formatTelegramQaProgressDetails(result.details)}`,
+            );
           }
           assertLeaseHealthy();
         }
@@ -1066,6 +1184,15 @@ export async function runTelegramQaLive(params: {
   const publishedCleanupIssues = redactPublicMetadata
     ? cleanupIssues.map(() => "details redacted (OPENCLAW_QA_REDACT_PUBLIC_METADATA=1)")
     : cleanupIssues;
+  const passedCount = scenarioResults.filter((entry) => entry.status === "pass").length;
+  const failedCount = scenarioResults.filter((entry) => entry.status === "fail").length;
+  writeTelegramQaProgress(
+    progressEnabled,
+    `run complete: passed=${passedCount} failed=${failedCount} total=${scenarioResults.length}`,
+  );
+  if (cleanupIssues.length > 0) {
+    writeTelegramQaProgress(progressEnabled, `cleanup issues: count=${cleanupIssues.length}`);
+  }
   const summary: TelegramQaSummary = {
     credentials: {
       source: credentialLease.source,
@@ -1080,8 +1207,8 @@ export async function runTelegramQaLive(params: {
     cleanupIssues: publishedCleanupIssues,
     counts: {
       total: scenarioResults.length,
-      passed: scenarioResults.filter((entry) => entry.status === "pass").length,
-      failed: scenarioResults.filter((entry) => entry.status === "fail").length,
+      passed: passedCount,
+      failed: failedCount,
     },
     scenarios: scenarioResults,
   };
@@ -1162,6 +1289,10 @@ export const __testing = {
   findScenario,
   matchesTelegramScenarioReply,
   normalizeTelegramObservedMessage,
+  parseTelegramQaProgressBooleanEnv,
   parseTelegramQaCredentialPayload,
   resolveTelegramQaRuntimeEnv,
+  sanitizeTelegramQaProgressValue,
+  shouldLogTelegramQaLiveProgress,
+  formatTelegramQaProgressDetails,
 };

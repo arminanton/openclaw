@@ -18,6 +18,7 @@ import { isMattermostExtensionRoot } from "../test/vitest/vitest.extension-matte
 import { isMediaExtensionRoot } from "../test/vitest/vitest.extension-media-paths.mjs";
 import { isMemoryExtensionRoot } from "../test/vitest/vitest.extension-memory-paths.mjs";
 import { isMessagingExtensionRoot } from "../test/vitest/vitest.extension-messaging-paths.mjs";
+import { isMiscExtensionRoot } from "../test/vitest/vitest.extension-misc-paths.mjs";
 import { isMsTeamsExtensionRoot } from "../test/vitest/vitest.extension-msteams-paths.mjs";
 import {
   isProviderExtensionRoot,
@@ -79,6 +80,7 @@ const EXTENSION_MATRIX_VITEST_CONFIG = "test/vitest/vitest.extension-matrix.conf
 const EXTENSION_MEMORY_VITEST_CONFIG = "test/vitest/vitest.extension-memory.config.ts";
 const EXTENSION_MSTEAMS_VITEST_CONFIG = "test/vitest/vitest.extension-msteams.config.ts";
 const EXTENSION_MESSAGING_VITEST_CONFIG = "test/vitest/vitest.extension-messaging.config.ts";
+const EXTENSION_MISC_VITEST_CONFIG = "test/vitest/vitest.extension-misc.config.ts";
 const EXTENSION_PROVIDER_OPENAI_VITEST_CONFIG =
   "test/vitest/vitest.extension-provider-openai.config.ts";
 const EXTENSION_PROVIDERS_VITEST_CONFIG = "test/vitest/vitest.extension-providers.config.ts";
@@ -148,6 +150,7 @@ const VITEST_CONFIG_BY_KIND = {
   extensionMedia: EXTENSION_MEDIA_VITEST_CONFIG,
   extensionMemory: EXTENSION_MEMORY_VITEST_CONFIG,
   extensionMessaging: EXTENSION_MESSAGING_VITEST_CONFIG,
+  extensionMisc: EXTENSION_MISC_VITEST_CONFIG,
   extensionMsTeams: EXTENSION_MSTEAMS_VITEST_CONFIG,
   extensionProviderOpenAi: EXTENSION_PROVIDER_OPENAI_VITEST_CONFIG,
   extensionProvider: EXTENSION_PROVIDERS_VITEST_CONFIG,
@@ -214,6 +217,8 @@ const GENERATED_CHANGED_TEST_TARGETS = new Set([
   "src/canvas-host/a2ui/.bundle.hash",
   "src/canvas-host/a2ui/a2ui.bundle.js",
 ]);
+const VITEST_NO_OUTPUT_TIMEOUT_ENV_KEY = "OPENCLAW_VITEST_NO_OUTPUT_TIMEOUT_MS";
+export const DEFAULT_TEST_PROJECTS_VITEST_NO_OUTPUT_TIMEOUT_MS = "180000";
 const VITEST_CONFIG_TARGET_KIND_BY_PATH = new Map(
   Object.entries(VITEST_CONFIG_BY_KIND).map(([kind, config]) => [config, kind]),
 );
@@ -597,6 +602,9 @@ function classifyTarget(arg, cwd) {
     if (isMessagingExtensionRoot(extensionRoot)) {
       return "extensionMessaging";
     }
+    if (isMiscExtensionRoot(extensionRoot)) {
+      return "extensionMisc";
+    }
     return isProviderExtensionRoot(extensionRoot) ? "extensionProvider" : "extension";
   }
   const channelContractKind = resolveChannelContractTargetKind(relative);
@@ -849,6 +857,7 @@ export function buildVitestRunPlans(
     "extensionMatrix",
     "extensionMedia",
     "extensionMemory",
+    "extensionMisc",
     "extensionMsTeams",
     "extensionMessaging",
     "extensionProviderOpenAi",
@@ -1016,6 +1025,32 @@ export function applyParallelVitestCachePaths(specs, params = {}) {
           ".experimental-vitest-cache",
           cacheSegment,
         ),
+      },
+    };
+  });
+}
+
+export function applyDefaultMultiSpecVitestCachePaths(specs, params = {}) {
+  if (specs.length <= 1 || specs.some((spec) => spec.watchMode)) {
+    return specs;
+  }
+  return applyParallelVitestCachePaths(specs, params);
+}
+
+export function applyDefaultVitestNoOutputTimeout(specs, params = {}) {
+  const baseEnv = params.env ?? process.env;
+  if (Object.hasOwn(baseEnv, VITEST_NO_OUTPUT_TIMEOUT_ENV_KEY)) {
+    return specs;
+  }
+  return specs.map((spec) => {
+    if (spec.watchMode || Object.hasOwn(spec.env ?? {}, VITEST_NO_OUTPUT_TIMEOUT_ENV_KEY)) {
+      return spec;
+    }
+    return {
+      ...spec,
+      env: {
+        ...spec.env,
+        [VITEST_NO_OUTPUT_TIMEOUT_ENV_KEY]: DEFAULT_TEST_PROJECTS_VITEST_NO_OUTPUT_TIMEOUT_MS,
       },
     };
   });
