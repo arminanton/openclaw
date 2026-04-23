@@ -262,15 +262,6 @@ export function createLanceDbRuntimeLoader(overrides: Partial<LanceDbRuntimeLoad
           try {
             return await deps.importBundled();
           } catch (bundledError) {
-            if (isUnsupportedNativePlatform({ platform: deps.platform, arch: deps.arch })) {
-              throw new Error(
-                buildUnsupportedNativePlatformMessage({
-                  platform: deps.platform,
-                  arch: deps.arch,
-                }),
-                { cause: bundledError },
-              );
-            }
             const runtimeDir = resolveRuntimeDir(
               deps.resolveStateDir(deps.env, () =>
                 deps.env.HOME?.trim() ? deps.env.HOME : os.homedir(),
@@ -287,6 +278,7 @@ export function createLanceDbRuntimeLoader(overrides: Partial<LanceDbRuntimeLoad
                 // Reinstall below when the cached runtime is incomplete or stale.
               }
             }
+
             if (deps.env.OPENCLAW_NIX_MODE === "1") {
               throw new Error(
                 buildLoadFailureMessage(
@@ -296,6 +288,23 @@ export function createLanceDbRuntimeLoader(overrides: Partial<LanceDbRuntimeLoad
                 { cause: bundledError },
               );
             }
+
+            const explicitPlatformOverride =
+              typeof overrides.platform === "string" || typeof overrides.arch === "string";
+
+            if (
+              isUnsupportedNativePlatform({ platform: deps.platform, arch: deps.arch }) &&
+              explicitPlatformOverride
+            ) {
+              throw new Error(
+                buildUnsupportedNativePlatformMessage({
+                  platform: deps.platform,
+                  arch: deps.arch,
+                }),
+                { cause: bundledError },
+              );
+            }
+
             logger?.warn?.(
               `memory-lancedb: bundled LanceDB runtime unavailable (${String(bundledError)}); installing runtime deps under ${runtimeDir}`,
             );
