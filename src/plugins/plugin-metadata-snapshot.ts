@@ -14,16 +14,18 @@ import type {
   PluginMetadataSnapshotOwnerMaps,
 } from "./plugin-metadata-snapshot.types.js";
 import { createPluginRegistryIdNormalizer } from "./plugin-registry-id-normalizer.js";
-import { loadPluginRegistrySnapshotWithMetadata } from "./plugin-registry-snapshot.js";
+import { loadPluginRegistrySnapshotWithMetadata } from "./plugin-registry.js";
 export type {
   LoadPluginMetadataSnapshotParams,
+  PluginMetadataManifestView,
+  PluginMetadataRegistryView,
   PluginMetadataSnapshot,
   PluginMetadataSnapshotMetrics,
   PluginMetadataSnapshotOwnerMaps,
   PluginMetadataSnapshotRegistryDiagnostic,
 } from "./plugin-metadata-snapshot.types.js";
 
-function resolvePluginMetadataSnapshotConfigFingerprint(
+function resolvePluginMetadataControlPlaneFingerprint(
   params: Pick<LoadPluginMetadataSnapshotParams, "config" | "env" | "workspaceDir"> & {
     index?: InstalledPluginIndex;
     policyHash?: string;
@@ -60,7 +62,7 @@ export function isPluginMetadataSnapshotCompatible(params: {
     params.snapshot.policyHash === resolveInstalledPluginIndexPolicyHash(params.config) &&
     (!params.snapshot.configFingerprint ||
       params.snapshot.configFingerprint ===
-        resolvePluginMetadataSnapshotConfigFingerprint({
+        resolvePluginMetadataControlPlaneFingerprint({
           config: params.config,
           env,
           index: params.index ?? params.snapshot.index,
@@ -87,7 +89,7 @@ function freezeOwnerMap(owners: Map<string, string[]>): ReadonlyMap<string, read
   );
 }
 
-export function buildPluginMetadataOwnerMaps(
+function buildPluginMetadataOwnerMaps(
   plugins: readonly PluginManifestRecord[],
 ): PluginMetadataSnapshotOwnerMaps {
   const channels = new Map<string, string[]>();
@@ -100,13 +102,13 @@ export function buildPluginMetadataOwnerMaps(
   const contracts = new Map<string, string[]>();
 
   for (const plugin of plugins) {
-    for (const channelId of plugin.channels) {
+    for (const channelId of plugin.channels ?? []) {
       appendOwner(channels, channelId, plugin.id);
     }
     for (const channelId of Object.keys(plugin.channelConfigs ?? {})) {
       appendOwner(channelConfigs, channelId, plugin.id);
     }
-    for (const providerId of plugin.providers) {
+    for (const providerId of plugin.providers ?? []) {
       appendOwner(providers, providerId, plugin.id);
     }
     for (const providerId of Object.keys(plugin.modelCatalog?.providers ?? {})) {
@@ -115,7 +117,7 @@ export function buildPluginMetadataOwnerMaps(
     for (const providerId of Object.keys(plugin.modelCatalog?.aliases ?? {})) {
       appendOwner(modelCatalogProviders, providerId, plugin.id);
     }
-    for (const cliBackendId of plugin.cliBackends) {
+    for (const cliBackendId of plugin.cliBackends ?? []) {
       appendOwner(cliBackends, cliBackendId, plugin.id);
     }
     for (const cliBackendId of plugin.setup?.cliBackends ?? []) {
@@ -144,6 +146,12 @@ export function buildPluginMetadataOwnerMaps(
     commandAliases: freezeOwnerMap(commandAliases),
     contracts: freezeOwnerMap(contracts),
   };
+}
+
+export function listPluginOriginsFromMetadataSnapshot(
+  snapshot: Pick<PluginMetadataSnapshot, "plugins">,
+): ReadonlyMap<string, PluginManifestRecord["origin"]> {
+  return new Map(snapshot.plugins.map((record) => [record.id, record.origin]));
 }
 
 export function loadPluginMetadataSnapshot(
@@ -195,7 +203,7 @@ function loadPluginMetadataSnapshotImpl(
 
   return {
     policyHash: index.policyHash,
-    configFingerprint: resolvePluginMetadataSnapshotConfigFingerprint({
+    configFingerprint: resolvePluginMetadataControlPlaneFingerprint({
       config: params.config,
       env: params.env,
       index,
