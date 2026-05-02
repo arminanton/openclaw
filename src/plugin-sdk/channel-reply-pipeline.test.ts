@@ -45,7 +45,7 @@ describe("createChannelReplyPipeline", () => {
     );
 
     expect(typeof pipeline.onModelSelected).toBe("function");
-    expect(typeof pipeline.onResponseTemplateContextResolved).toBe("function");
+    expect(pipeline.onResponseTemplateContextResolved).toBeUndefined();
     expect(typeof pipeline.responsePrefixContextProvider).toBe("function");
 
     if (!expectTypingCallbacks) {

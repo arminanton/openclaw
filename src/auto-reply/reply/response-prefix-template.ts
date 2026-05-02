@@ -58,9 +58,7 @@ function formatCompactTokenValue(value: number | undefined): string | undefined 
 }
 
 function formatIntegerValue(value: number | undefined): string | undefined {
-  return typeof value === "number" && Number.isFinite(value)
-    ? `${Math.round(value)}`
-    : undefined;
+  return typeof value === "number" && Number.isFinite(value) ? `${Math.round(value)}` : undefined;
 }
 
 const USAGE_AWARE_TEMPLATE_VARS = new Set([
@@ -93,6 +91,8 @@ const PREFIX_SOFT_MISSING_TEMPLATE_VARS = new Set([
   "session",
   "sessionkey",
 ]);
+
+const LATE_BOUND_TEMPLATE_VARS = new Set(PREFIX_SOFT_MISSING_TEMPLATE_VARS);
 
 /**
  * Interpolate template variables in a response metadata string.
@@ -260,4 +260,8 @@ export function hasTemplateVariables(template: string | undefined): boolean {
  */
 export function hasUsageTemplateVariables(template: string | undefined): boolean {
   return listTemplateVariables(template).some((name) => USAGE_AWARE_TEMPLATE_VARS.has(name));
+}
+
+export function hasLateBoundTemplateVariables(template: string | undefined): boolean {
+  return listTemplateVariables(template).some((name) => LATE_BOUND_TEMPLATE_VARS.has(name));
 }

@@ -1,4 +1,5 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import type { InstalledPluginIndex } from "../../plugins/installed-plugin-index.js";
 
 const OPENAI_CODEX_MODEL = {
   provider: "openai-codex",
@@ -18,7 +19,7 @@ const OPENAI_CODEX_53_MODEL = {
   name: "GPT-5.3 Codex",
 };
 
-const EMPTY_PLUGIN_INDEX = {
+const EMPTY_PLUGIN_INDEX: InstalledPluginIndex = {
   version: 1,
   hostContractVersion: "test",
   compatRegistryVersion: "test",
@@ -540,7 +541,25 @@ describe("modelsListCommand forward-compat", () => {
       mocks.loadPluginRegistrySnapshotWithMetadata.mockReturnValueOnce({
         source: "persisted",
         snapshot: {
-          plugins: [{ enabled: true, syntheticAuthRefs: ["codex"] }],
+          ...EMPTY_PLUGIN_INDEX,
+          plugins: [
+            {
+              pluginId: "codex-auth",
+              manifestPath: "/tmp/codex-auth/plugin.json",
+              manifestHash: "hash-codex-auth",
+              rootDir: "/tmp/codex-auth",
+              origin: "global",
+              enabled: true,
+              startup: {
+                sidecar: false,
+                memory: false,
+                deferConfiguredChannelFullLoadUntilAfterListen: false,
+                agentHarnesses: [],
+              },
+              compat: [],
+              syntheticAuthRefs: ["codex"],
+            },
+          ],
         },
         diagnostics: [],
       });

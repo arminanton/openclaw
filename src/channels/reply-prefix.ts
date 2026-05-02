@@ -2,6 +2,7 @@ import { resolveAgentIdentity, resolveEffectiveMessagesConfig } from "../agents/
 import type { GetReplyOptions } from "../auto-reply/get-reply-options.types.js";
 import {
   extractShortModelName,
+  hasLateBoundTemplateVariables,
   type ResponsePrefixContext,
 } from "../auto-reply/reply/response-prefix-template.js";
 import type { OpenClawConfig } from "../config/types.openclaw.js";
@@ -17,12 +18,15 @@ export type ReplyPrefixContextBundle = {
   responsePrefix?: string;
   responsePrefixContextProvider: () => ResponsePrefixContext;
   onModelSelected: (ctx: ModelSelectionContext) => void;
-  onResponseTemplateContextResolved: (ctx: ResponseTemplateResolvedContext) => void;
+  onResponseTemplateContextResolved?: (ctx: ResponseTemplateResolvedContext) => void;
 };
 
 export type ReplyPrefixOptions = Pick<
   ReplyPrefixContextBundle,
-  "responsePrefix" | "responsePrefixContextProvider" | "onModelSelected" | "onResponseTemplateContextResolved"
+  | "responsePrefix"
+  | "responsePrefixContextProvider"
+  | "onModelSelected"
+  | "onResponseTemplateContextResolved"
 >;
 
 export function createReplyPrefixContext(params: {
@@ -44,19 +48,22 @@ export function createReplyPrefixContext(params: {
     prefixContext.thinkingLevel = ctx.thinkLevel ?? "off";
   };
 
-  const onResponseTemplateContextResolved = (ctx: ResponseTemplateResolvedContext) => {
-    Object.assign(prefixContext, ctx);
-  };
+  const responsePrefix = resolveEffectiveMessagesConfig(cfg, agentId, {
+    channel: params.channel,
+    accountId: params.accountId,
+  }).responsePrefix;
+  const onResponseTemplateContextResolved = hasLateBoundTemplateVariables(responsePrefix)
+    ? (ctx: ResponseTemplateResolvedContext) => {
+        Object.assign(prefixContext, ctx);
+      }
+    : undefined;
 
   return {
     prefixContext,
-    responsePrefix: resolveEffectiveMessagesConfig(cfg, agentId, {
-      channel: params.channel,
-      accountId: params.accountId,
-    }).responsePrefix,
+    responsePrefix,
     responsePrefixContextProvider: () => prefixContext,
     onModelSelected,
-    onResponseTemplateContextResolved,
+    ...(onResponseTemplateContextResolved ? { onResponseTemplateContextResolved } : {}),
   };
 }
 
