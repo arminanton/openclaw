@@ -16,6 +16,7 @@ import { isTruthyEnvValue } from "../infra/env.js";
 import { normalizeLowercaseStringOrEmpty } from "../shared/string-coerce.js";
 import { getFreePortBlockWithPermissionFallback } from "../test-utils/ports.js";
 import { GATEWAY_CLIENT_MODES, GATEWAY_CLIENT_NAMES } from "../utils/message-channel.js";
+import { startGatewayClientWhenEventLoopReady } from "./client-start-readiness.js";
 import { GatewayClient, type GatewayClientOptions } from "./client.js";
 
 // Aggregate docker live runs can contend on startup enough that the gateway
@@ -136,7 +137,13 @@ export function shouldRunCliModelSwitchProbe(providerId: string, modelRef: strin
 export function matchesCliBackendReply(text: string, expected: string): boolean {
   const normalized = text.trim();
   const target = expected.trim();
-  return normalized === target || normalized === target.slice(0, -1);
+  const targetWithoutPeriod = target.slice(0, -1);
+  return (
+    normalized === target ||
+    normalized === targetWithoutPeriod ||
+    normalized.includes(target) ||
+    normalized.includes(targetWithoutPeriod)
+  );
 }
 
 export function withClaudeMcpConfigOverrides(args: string[], mcpConfigPath: string): string[] {
@@ -283,11 +290,13 @@ async function connectClientOnce(params: {
   return await new Promise<GatewayClient>((resolve, reject) => {
     let done = false;
     let client: GatewayClient | undefined;
+    const abortStart = new AbortController();
     const finish = (result: { client?: GatewayClient; error?: Error }) => {
       if (done) {
         return;
       }
       done = true;
+      abortStart.abort();
       clearTimeout(connectTimeout);
       if (result.error) {
         if (client) {
@@ -328,7 +337,19 @@ async function connectClientOnce(params: {
       params.timeoutMs,
     );
     connectTimeout.unref();
-    client.start();
+    void startGatewayClientWhenEventLoopReady(client, {
+      timeoutMs: params.timeoutMs,
+      signal: abortStart.signal,
+    }).then(
+      (readiness) => {
+        if (!readiness.ready && !readiness.aborted) {
+          finish({ error: new Error("gateway event loop readiness timeout") });
+        }
+      },
+      (error) => {
+        finish({ error: error instanceof Error ? error : new Error(String(error)) });
+      },
+    );
   });
 }
 

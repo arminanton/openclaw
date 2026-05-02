@@ -1,3 +1,4 @@
+import { createProviderHttpError } from "openclaw/plugin-sdk/provider-http";
 import type { OpenClawConfig } from "openclaw/plugin-sdk/provider-onboard";
 import {
   buildSearchCacheKey,
@@ -196,8 +197,7 @@ async function runKimiSearch(params: {
         res,
       ): Promise<{ done: true; content: string; citations: string[] } | { done: false }> => {
         if (!res.ok) {
-          const detail = await res.text();
-          throw new Error(`Kimi API error (${res.status}): ${detail || res.statusText}`);
+          throw await createProviderHttpError(res, "Kimi API error");
         }
 
         const data = (await res.json()) as KimiSearchResponse;
@@ -274,7 +274,7 @@ export async function executeKimiWebSearchProviderTool(
     return {
       error: "missing_kimi_api_key",
       message:
-        "web_search (kimi) needs a Moonshot API key. Set KIMI_API_KEY or MOONSHOT_API_KEY in the Gateway environment, or configure tools.web.search.kimi.apiKey.",
+        "web_search (kimi) needs a Moonshot API key. Set KIMI_API_KEY or MOONSHOT_API_KEY in the Gateway environment, or configure tools.web.search.kimi.apiKey. If you do not want to configure a search API key, use web_fetch for a specific URL or the browser tool for interactive pages.",
       docs: "https://docs.openclaw.ai/tools/web",
     };
   }

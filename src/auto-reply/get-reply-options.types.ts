@@ -30,6 +30,8 @@ export type ReplyThreadingPolicy = {
   implicitCurrentMessage?: "default" | "allow" | "deny";
 };
 
+export type SourceReplyDeliveryMode = "automatic" | "message_tool_only";
+
 export type GetReplyOptions = {
   /** Override run id for agent events (defaults to random UUID). */
   runId?: string;
@@ -56,6 +58,8 @@ export type GetReplyOptions = {
   bootstrapContextMode?: "full" | "lightweight";
   /** If true, suppress tool error warning payloads for this run. */
   suppressToolErrorWarnings?: boolean;
+  /** If true, run the model without OpenClaw tools for this turn. */
+  disableTools?: boolean;
   /**
    * If true, dispatch skips default tool/progress text messages and expects the
    * channel to surface progress via its own streaming/edit UX.
@@ -146,6 +150,11 @@ export type GetReplyOptions = {
   onModelSelected?: (ctx: ModelSelectedContext) => void;
   /** Called when late-bound response template fields (usage, cost, context) become available. */
   onResponseTemplateContextResolved?: (ctx: ResponseTemplateContext) => void;
+  /**
+   * Controls whether normal assistant replies are automatically delivered to
+   * the source conversation.
+   */
+  sourceReplyDeliveryMode?: SourceReplyDeliveryMode;
   disableBlockStreaming?: boolean;
   /** Timeout for block reply delivery (ms). */
   blockReplyTimeoutMs?: number;

@@ -330,6 +330,12 @@ function readStabilityEventRecord(
   assignOptionalCodeString(sanitized, "toolName", record.toolName, `${label}.toolName`);
   assignOptionalCodeString(
     sanitized,
+    "activeWorkKind",
+    record.activeWorkKind,
+    `${label}.activeWorkKind`,
+  );
+  assignOptionalCodeString(
+    sanitized,
     "pairedToolName",
     record.pairedToolName,
     `${label}.pairedToolName`,
@@ -338,6 +344,14 @@ function readStabilityEventRecord(
   assignOptionalCodeString(sanitized, "model", record.model, `${label}.model`);
 
   assignOptionalNumber(sanitized, "durationMs", record.durationMs, `${label}.durationMs`);
+  assignOptionalNumber(sanitized, "requestBytes", record.requestBytes, `${label}.requestBytes`);
+  assignOptionalNumber(sanitized, "responseBytes", record.responseBytes, `${label}.responseBytes`);
+  assignOptionalNumber(
+    sanitized,
+    "timeToFirstByteMs",
+    record.timeToFirstByteMs,
+    `${label}.timeToFirstByteMs`,
+  );
   assignOptionalNumber(sanitized, "costUsd", record.costUsd, `${label}.costUsd`);
   assignOptionalNumber(sanitized, "count", record.count, `${label}.count`);
   assignOptionalNumber(sanitized, "bytes", record.bytes, `${label}.bytes`);

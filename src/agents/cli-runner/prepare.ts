@@ -1,3 +1,4 @@
+import { getRuntimeConfig } from "../../config/config.js";
 import { ensureMcpLoopbackServer } from "../../gateway/mcp-http.js";
 import {
   createMcpLoopbackServerConfig,
@@ -7,8 +8,12 @@ import type {
   CliBackendAuthEpochMode,
   CliBackendPreparedExecution,
 } from "../../plugins/cli-backend.types.js";
+import { buildAgentHookContextChannelFields } from "../../plugins/hook-agent-context.js";
+import { getGlobalHookRunner } from "../../plugins/hook-runner-global.js";
+import { annotateInterSessionPromptText } from "../../sessions/input-provenance.js";
 import { resolveOpenClawAgentDir } from "../agent-paths.js";
 import { resolveSessionAgentIds } from "../agent-scope.js";
+import { externalCliDiscoveryForProviderAuth } from "../auth-profiles/external-cli-discovery.js";
 import { loadAuthProfileStoreForRuntime } from "../auth-profiles/store.js";
 import type { AuthProfileCredential } from "../auth-profiles/types.js";
 import {
@@ -30,6 +35,9 @@ import {
   resolveBootstrapPromptTruncationWarningMode,
   resolveBootstrapTotalMaxChars,
 } from "../pi-embedded-helpers.js";
+import { resolvePromptBuildHookResult } from "../pi-embedded-runner/run/attempt.prompt-helpers.js";
+import { resolveAttemptPrependSystemContext } from "../pi-embedded-runner/run/attempt.prompt-helpers.js";
+import { composeSystemPromptWithHookContext } from "../pi-embedded-runner/run/attempt.thread-helpers.js";
 import { applyPluginTextReplacements } from "../plugin-text-transforms.js";
 import { resolveSkillsPromptForRun } from "../skills.js";
 import { resolveSystemPromptOverride } from "../system-prompt-override.js";
@@ -38,6 +46,11 @@ import { redactRunIdentifier, resolveRunWorkspaceDir } from "../workspace-run.js
 import { prepareCliBundleMcpConfig } from "./bundle-mcp.js";
 import { buildSystemPrompt, normalizeCliModel } from "./helpers.js";
 import { cliBackendLog } from "./log.js";
+import {
+  buildCliSessionHistoryPrompt,
+  loadCliSessionHistoryMessages,
+  loadCliSessionReseedMessages,
+} from "./session-history.js";
 import type { PreparedCliRunContext, RunCliAgentParams } from "./types.js";
 
 const prepareDeps = {
@@ -46,9 +59,9 @@ const prepareDeps = {
   getActiveMcpLoopbackRuntime,
   ensureMcpLoopbackServer,
   createMcpLoopbackServerConfig,
-  resolveOpenClawDocsPath: async (
-    params: Parameters<typeof import("../docs-path.js").resolveOpenClawDocsPath>[0],
-  ) => (await import("../docs-path.js")).resolveOpenClawDocsPath(params),
+  resolveOpenClawReferencePaths: async (
+    params: Parameters<typeof import("../docs-path.js").resolveOpenClawReferencePaths>[0],
+  ) => (await import("../docs-path.js")).resolveOpenClawReferencePaths(params),
 };
 
 export function setCliRunnerPrepareTestDeps(overrides: Partial<typeof prepareDeps>): void {
@@ -90,9 +103,16 @@ export async function prepareCliRunContext(
   }
   const workspaceDir = resolvedWorkspace;
 
-  const backendResolved = resolveCliBackendConfig(params.provider, params.config);
+  const backendResolved = resolveCliBackendConfig(params.provider, params.config, {
+    agentId: params.agentId,
+  });
   if (!backendResolved) {
     throw new Error(`Unknown CLI backend: ${params.provider}`);
+  }
+  if (params.disableTools === true && backendResolved.nativeToolMode === "always-on") {
+    throw new Error(
+      `CLI backend ${backendResolved.id} cannot run with tools disabled because it exposes native tools`,
+    );
   }
   const agentDir = resolveOpenClawAgentDir();
   const requestedAuthProfileId = params.authProfileId?.trim() || undefined;
@@ -102,7 +122,10 @@ export async function prepareCliRunContext(
   if (effectiveAuthProfileId) {
     const authStore = loadAuthProfileStoreForRuntime(agentDir, {
       readOnly: true,
-      allowKeychainPrompt: false,
+      externalCli: externalCliDiscoveryForProviderAuth({
+        provider: params.provider,
+        profileId: effectiveAuthProfileId,
+      }),
     });
     authCredential = authStore.profiles[effectiveAuthProfileId];
   }
@@ -152,10 +175,9 @@ export async function prepareCliRunContext(
     config: params.config,
     agentId: params.agentId,
   });
-  let mcpLoopbackRuntime = backendResolved.bundleMcp
-    ? prepareDeps.getActiveMcpLoopbackRuntime()
-    : undefined;
-  if (backendResolved.bundleMcp && !mcpLoopbackRuntime) {
+  const bundleMcpEnabled = backendResolved.bundleMcp && params.disableTools !== true;
+  let mcpLoopbackRuntime = bundleMcpEnabled ? prepareDeps.getActiveMcpLoopbackRuntime() : undefined;
+  if (bundleMcpEnabled && !mcpLoopbackRuntime) {
     try {
       await prepareDeps.ensureMcpLoopbackServer();
     } catch (error) {
@@ -164,7 +186,7 @@ export async function prepareCliRunContext(
     mcpLoopbackRuntime = prepareDeps.getActiveMcpLoopbackRuntime();
   }
   const preparedBackend = await prepareCliBundleMcpConfig({
-    enabled: backendResolved.bundleMcp,
+    enabled: bundleMcpEnabled,
     mode: backendResolved.bundleMcpMode,
     backend: backendResolved.config,
     workspaceDir,
@@ -181,7 +203,7 @@ export async function prepareCliRunContext(
           OPENCLAW_MCP_AGENT_ID: sessionAgentId ?? "",
           OPENCLAW_MCP_ACCOUNT_ID: params.agentAccountId ?? "",
           OPENCLAW_MCP_SESSION_KEY: params.sessionKey ?? "",
-          OPENCLAW_MCP_MESSAGE_CHANNEL: params.messageProvider ?? "",
+          OPENCLAW_MCP_MESSAGE_CHANNEL: params.messageChannel ?? params.messageProvider ?? "",
         }
       : undefined,
     warn: (message) => cliBackendLog.warn(message),
@@ -252,12 +274,23 @@ export async function prepareCliRunContext(
       `cli session reset: provider=${params.provider} reason=${reusableCliSession.invalidatedReason}`,
     );
   }
+  let openClawHistoryMessages: unknown[] | undefined;
+  const loadOpenClawHistoryMessages = async () => {
+    openClawHistoryMessages ??= await loadCliSessionHistoryMessages({
+      sessionId: params.sessionId,
+      sessionFile: params.sessionFile,
+      sessionKey: params.sessionKey,
+      agentId: params.agentId,
+      config: params.config,
+    });
+    return openClawHistoryMessages;
+  };
   const heartbeatPrompt = resolveHeartbeatPromptForSystemPrompt({
     config: params.config,
     agentId: sessionAgentId,
     defaultAgentId,
   });
-  const docsPath = await prepareDeps.resolveOpenClawDocsPath({
+  const openClawReferences = await prepareDeps.resolveOpenClawReferencePaths({
     workspaceDir,
     argv1: process.argv[1],
     cwd: process.cwd(),
@@ -279,9 +312,12 @@ export async function prepareCliRunContext(
       config: params.config,
       defaultThinkLevel: params.thinkLevel,
       extraSystemPrompt,
+      sourceReplyDeliveryMode: params.sourceReplyDeliveryMode,
+      silentReplyPromptMode: params.silentReplyPromptMode,
       ownerNumbers: params.ownerNumbers,
       heartbeatPrompt,
-      docsPath: docsPath ?? undefined,
+      docsPath: openClawReferences.docsPath ?? undefined,
+      sourcePath: openClawReferences.sourcePath ?? undefined,
       skillsPrompt,
       tools: [],
       contextFiles,
@@ -298,10 +334,64 @@ export async function prepareCliRunContext(
       agentId: sessionAgentId,
       systemPrompt: builtSystemPrompt,
     }) ?? builtSystemPrompt;
-  const systemPrompt = applyPluginTextReplacements(
-    transformedSystemPrompt,
-    backendResolved.textTransforms?.input,
-  );
+  let systemPrompt = transformedSystemPrompt;
+  let preparedPrompt = params.prompt;
+  const hookRunner = getGlobalHookRunner();
+  try {
+    const hookResult = await resolvePromptBuildHookResult({
+      config: params.config ?? getRuntimeConfig(),
+      prompt: params.prompt,
+      messages: await loadOpenClawHistoryMessages(),
+      hookCtx: {
+        runId: params.runId,
+        agentId: sessionAgentId,
+        sessionKey: params.sessionKey,
+        sessionId: params.sessionId,
+        workspaceDir,
+        modelProviderId: params.provider,
+        modelId,
+        trigger: params.trigger,
+        ...buildAgentHookContextChannelFields(params),
+      },
+      hookRunner,
+    });
+    if (hookResult.prependContext) {
+      preparedPrompt = `${hookResult.prependContext}\n\n${preparedPrompt}`;
+    }
+    if (hookResult.appendContext) {
+      preparedPrompt = `${preparedPrompt}\n\n${hookResult.appendContext}`;
+    }
+    const hookSystemPrompt = hookResult.systemPrompt?.trim();
+    if (hookSystemPrompt) {
+      systemPrompt = hookSystemPrompt;
+    }
+    systemPrompt =
+      composeSystemPromptWithHookContext({
+        baseSystemPrompt: systemPrompt,
+        prependSystemContext: resolveAttemptPrependSystemContext({
+          sessionKey: params.sessionKey,
+          trigger: params.trigger,
+          hookPrependSystemContext: hookResult.prependSystemContext,
+        }),
+        appendSystemContext: hookResult.appendSystemContext,
+      }) ?? systemPrompt;
+  } catch (error) {
+    cliBackendLog.warn(`cli prompt-build hook preparation failed: ${String(error)}`);
+  }
+  preparedPrompt = annotateInterSessionPromptText(preparedPrompt, params.inputProvenance);
+  const openClawHistoryPrompt = reusableCliSession.sessionId
+    ? undefined
+    : buildCliSessionHistoryPrompt({
+        messages: await loadCliSessionReseedMessages({
+          sessionId: params.sessionId,
+          sessionFile: params.sessionFile,
+          sessionKey: params.sessionKey,
+          agentId: params.agentId,
+          config: params.config,
+        }),
+        prompt: preparedPrompt,
+      });
+  systemPrompt = applyPluginTextReplacements(systemPrompt, backendResolved.textTransforms?.input);
   const systemPromptReport = buildSystemPromptReport({
     source: "run",
     generatedAt: Date.now(),
@@ -326,7 +416,7 @@ export async function prepareCliRunContext(
   });
 
   return {
-    params,
+    params: preparedPrompt === params.prompt ? params : { ...params, prompt: preparedPrompt },
     effectiveAuthProfileId,
     started,
     workspaceDir,
@@ -338,6 +428,7 @@ export async function prepareCliRunContext(
     systemPrompt,
     systemPromptReport,
     bootstrapPromptWarningLines: bootstrapPromptWarning.lines,
+    ...(openClawHistoryPrompt ? { openClawHistoryPrompt } : {}),
     heartbeatPrompt,
     authEpoch,
     authEpochVersion: CLI_AUTH_EPOCH_VERSION,

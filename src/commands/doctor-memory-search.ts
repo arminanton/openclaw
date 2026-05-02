@@ -14,8 +14,8 @@ import {
 import { formatCliCommand } from "../cli/command-format.js";
 import type { OpenClawConfig } from "../config/types.openclaw.js";
 import { formatErrorMessage } from "../infra/errors.js";
-import { DEFAULT_LOCAL_MODEL } from "../memory-host-sdk/engine-embeddings.js";
 import { checkQmdBinaryAvailability } from "../memory-host-sdk/engine-qmd.js";
+import { DEFAULT_LOCAL_MODEL } from "../memory-host-sdk/host/embedding-defaults.js";
 import { hasConfiguredMemorySecretInput } from "../memory-host-sdk/secret.js";
 import {
   auditDreamingArtifacts,
@@ -34,6 +34,7 @@ import { normalizeOptionalString } from "../shared/string-coerce.js";
 import { note } from "../terminal/note.js";
 import { resolveUserPath } from "../utils.js";
 import type { DoctorPrompter } from "./doctor-prompter.js";
+import { maybeRepairWorkspaceMemoryHealth, noteWorkspaceMemoryHealth } from "./doctor-workspace.js";
 import { isRecord } from "./doctor/shared/legacy-config-record-shared.js";
 
 type RuntimeMemoryAuditContext = {
@@ -125,6 +126,10 @@ function resolveSuggestedRemoteMemoryProvider(): string | undefined {
   return listAutoSelectMemoryEmbeddingProviderDoctorMetadata().find(
     (provider) => provider.transport === "remote",
   )?.providerId;
+}
+
+function isKeyOptionalMemoryProvider(providerId: string): boolean {
+  return providerId === "local" || providerId === "ollama" || providerId === "lmstudio";
 }
 
 async function resolveRuntimeMemoryAuditContext(
@@ -224,6 +229,8 @@ export async function maybeRepairMemoryRecallHealth(params: {
   cfg: OpenClawConfig;
   prompter: DoctorPrompter;
 }): Promise<void> {
+  await maybeRepairWorkspaceMemoryHealth(params);
+
   try {
     const context = await resolveRuntimeMemoryAuditContext(params.cfg);
     const workspaceDir = context?.workspaceDir?.trim();
@@ -309,9 +316,12 @@ export async function noteMemorySearchHealth(
       checked: boolean;
       ready: boolean;
       error?: string;
+      skipped?: boolean;
     };
   },
 ): Promise<void> {
+  await noteWorkspaceMemoryHealth(cfg);
+
   const agentId = resolveDefaultAgentId(cfg);
   const agentDir = resolveAgentDir(cfg, agentId);
   const resolved = resolveMemorySearchConfig(cfg, agentId);
@@ -397,16 +407,26 @@ export async function noteMemorySearchHealth(
       );
       return;
     }
-    if (resolved.provider === "lmstudio") {
+    if (isKeyOptionalMemoryProvider(resolved.provider)) {
       if (opts?.gatewayMemoryProbe?.checked && opts.gatewayMemoryProbe.ready) {
+        return;
+      }
+      // When the probe was intentionally skipped (skipped: true / checked: false
+      // due to probe:false path), we have no embedding status information — do
+      // not warn. A skipped probe means the user ran `openclaw doctor` without
+      // --deep; it does not mean embeddings are unavailable.
+      // NOTE: a transport timeout also sets checked: false, but skipped stays
+      // false/absent — a timeout is a real diagnostic signal and should fall
+      // through to the warning below.
+      if (opts?.gatewayMemoryProbe?.skipped) {
         return;
       }
       const gatewayProbeWarning = buildGatewayProbeWarning(opts?.gatewayMemoryProbe);
       note(
         [
           gatewayProbeWarning
-            ? 'Memory search provider "lmstudio" is configured, but the gateway reports embeddings are not ready.'
-            : 'Memory search provider "lmstudio" is configured, but the gateway could not confirm embeddings are ready.',
+            ? `Memory search provider "${resolved.provider}" is configured, but the gateway reports embeddings are not ready.`
+            : `Memory search provider "${resolved.provider}" is configured, but the gateway could not confirm embeddings are ready.`,
           gatewayProbeWarning,
           `Verify: ${formatCliCommand("openclaw memory status --deep")}`,
         ]
@@ -570,6 +590,7 @@ function buildGatewayProbeWarning(
         checked: boolean;
         ready: boolean;
         error?: string;
+        skipped?: boolean;
       }
     | undefined,
 ): string | null {

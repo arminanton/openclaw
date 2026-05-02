@@ -1,5 +1,5 @@
 import { formatErrorMessage } from "../../infra/errors.js";
-import { FILE_LOCK_TIMEOUT_ERROR_CODE, withFileLock } from "../../infra/file-lock.js";
+import { withFileLock } from "../../infra/file-lock.js";
 import {
   AUTH_STORE_LOCK_OPTIONS,
   OAUTH_REFRESH_CALL_TIMEOUT_MS,
@@ -7,6 +7,10 @@ import {
   log,
 } from "./constants.js";
 import { shouldMirrorRefreshedOAuthCredential } from "./oauth-identity.js";
+import {
+  buildRefreshContentionError,
+  isGlobalRefreshLockTimeoutError,
+} from "./oauth-refresh-lock-errors.js";
 import {
   areOAuthCredentialsEquivalent,
   hasUsableOAuthCredential,
@@ -24,6 +28,7 @@ import {
   ensureAuthProfileStore,
   loadAuthProfileStoreForSecretsRuntime,
   saveAuthProfileStore,
+  resolvePersistedAuthProfileOwnerAgentDir,
   updateAuthProfileStoreWithLock,
 } from "./store.js";
 import type { AuthProfileStore, OAuthCredential, OAuthCredentials } from "./types.js";
@@ -131,33 +136,6 @@ function hasOAuthCredentialChanged(
   );
 }
 
-function isGlobalRefreshLockTimeoutError(error: unknown, lockPath: string): boolean {
-  const candidate =
-    typeof error === "object" && error !== null
-      ? (error as { code?: unknown; lockPath?: unknown })
-      : undefined;
-  return (
-    candidate?.code === FILE_LOCK_TIMEOUT_ERROR_CODE && candidate.lockPath === `${lockPath}.lock`
-  );
-}
-
-function buildRefreshContentionError(params: {
-  provider: string;
-  profileId: string;
-  cause: unknown;
-}): Error & { code: "refresh_contention"; cause: unknown } {
-  return Object.assign(
-    new Error(
-      `OAuth refresh failed (refresh_contention): another process is already refreshing ${params.provider} for ${params.profileId}. Please wait for the in-flight refresh to finish and retry.`,
-      { cause: params.cause },
-    ),
-    {
-      code: "refresh_contention" as const,
-      cause: params.cause,
-    },
-  );
-}
-
 async function loadFreshStoredOAuthCredential(params: {
   profileId: string;
   agentDir?: string;
@@ -251,7 +229,6 @@ export function createOAuthManager(adapter: OAuthManagerAdapter) {
         isSafeToAdoptMainStoreOAuthIdentity(params.credential, mainCred)
       ) {
         params.store.profiles[params.profileId] = { ...mainCred };
-        saveAuthProfileStore(params.store, params.agentDir);
         log.info("adopted newer OAuth credentials from main agent", {
           profileId: params.profileId,
           agentDir: params.agentDir,
@@ -340,14 +317,15 @@ export function createOAuthManager(adapter: OAuthManagerAdapter) {
     provider: string;
     agentDir?: string;
   }): Promise<ResolvedOAuthAccess | null> {
-    const authPath = resolveAuthStorePath(params.agentDir);
+    const ownerAgentDir = resolvePersistedAuthProfileOwnerAgentDir(params);
+    const authPath = resolveAuthStorePath(ownerAgentDir);
     ensureAuthStoreFile(authPath);
     const globalRefreshLockPath = resolveOAuthRefreshLockPath(params.provider, params.profileId);
 
     try {
       return await withFileLock(globalRefreshLockPath, OAUTH_REFRESH_LOCK_OPTIONS, async () =>
         withFileLock(authPath, AUTH_STORE_LOCK_OPTIONS, async () => {
-          const store = loadAuthProfileStoreForSecretsRuntime(params.agentDir);
+          const store = loadAuthProfileStoreForSecretsRuntime(ownerAgentDir);
           const cred = store.profiles[params.profileId];
           if (!cred || cred.type !== "oauth") {
             return null;
@@ -372,7 +350,6 @@ export function createOAuthManager(adapter: OAuthManagerAdapter) {
                 isSafeToAdoptMainStoreOAuthIdentity(cred, mainCred)
               ) {
                 store.profiles[params.profileId] = { ...mainCred };
-                saveAuthProfileStore(store, params.agentDir);
                 log.info("adopted fresh OAuth credential from main store (under refresh lock)", {
                   profileId: params.profileId,
                   agentDir: params.agentDir,
@@ -425,7 +402,7 @@ export function createOAuthManager(adapter: OAuthManagerAdapter) {
                 !areOAuthCredentialsEquivalent(cred, externallyManaged)
               ) {
                 store.profiles[params.profileId] = { ...externallyManaged };
-                saveAuthProfileStore(store, params.agentDir);
+                saveAuthProfileStore(store, ownerAgentDir);
               }
               credentialToRefresh = externallyManaged;
               if (hasUsableOAuthCredential(externallyManaged)) {
@@ -455,8 +432,8 @@ export function createOAuthManager(adapter: OAuthManagerAdapter) {
             return null;
           }
           store.profiles[params.profileId] = refreshedCredentials;
-          saveAuthProfileStore(store, params.agentDir);
-          if (params.agentDir) {
+          saveAuthProfileStore(store, ownerAgentDir);
+          if (ownerAgentDir) {
             const mainPath = resolveAuthStorePath(undefined);
             if (mainPath !== authPath) {
               await mirrorRefreshedCredentialIntoMainStore({
@@ -592,7 +569,6 @@ export function createOAuthManager(adapter: OAuthManagerAdapter) {
             isSafeToAdoptMainStoreOAuthIdentity(params.credential, mainCred)
           ) {
             refreshedStore.profiles[params.profileId] = { ...mainCred };
-            saveAuthProfileStore(refreshedStore, params.agentDir);
             log.info("inherited fresh OAuth credentials from main agent", {
               profileId: params.profileId,
               agentDir: params.agentDir,

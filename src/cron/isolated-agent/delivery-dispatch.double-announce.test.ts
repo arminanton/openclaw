@@ -15,10 +15,12 @@ import { SILENT_REPLY_TOKEN } from "../../auto-reply/tokens.js";
 
 // --- Module mocks (must be hoisted before imports) ---
 
-const { countActiveDescendantRunsMock, retireSessionMcpRuntimeMock } = vi.hoisted(() => ({
-  countActiveDescendantRunsMock: vi.fn().mockReturnValue(0),
-  retireSessionMcpRuntimeMock: vi.fn().mockResolvedValue(true),
-}));
+const { countActiveDescendantRunsMock, maybeApplyTtsToPayloadMock, retireSessionMcpRuntimeMock } =
+  vi.hoisted(() => ({
+    countActiveDescendantRunsMock: vi.fn().mockReturnValue(0),
+    maybeApplyTtsToPayloadMock: vi.fn(async (params: { payload: unknown }) => params.payload),
+    retireSessionMcpRuntimeMock: vi.fn().mockResolvedValue(true),
+  }));
 
 vi.mock("../../config/sessions/main-session.js", () => ({
   resolveAgentMainSessionKey: vi.fn(({ agentId }: { agentId: string }) => `agent:${agentId}:main`),
@@ -64,6 +66,10 @@ vi.mock("../../logger.js", () => ({
 
 vi.mock("../../infra/system-events.js", () => ({
   enqueueSystemEvent: vi.fn(),
+}));
+
+vi.mock("../../tts/tts.runtime.js", () => ({
+  maybeApplyTtsToPayload: maybeApplyTtsToPayloadMock,
 }));
 
 vi.mock("./subagent-followup-hints.js", () => ({
@@ -128,6 +134,7 @@ function makeBaseParams(overrides: {
   runStartedAt?: number;
   sessionTarget?: string;
   deliveryBestEffort?: boolean;
+  runSessionKey?: string;
 }): Parameters<typeof dispatchCronDelivery>[0] {
   const resolvedDelivery = makeResolvedDelivery();
   const runStartedAt = overrides.runStartedAt ?? Date.now();
@@ -144,6 +151,7 @@ function makeBaseParams(overrides: {
     } as never,
     agentId: "main",
     agentSessionKey: "agent:main",
+    runSessionKey: overrides.runSessionKey ?? "agent:main",
     sessionId: "test-session-id",
     runStartedAt,
     runEndedAt: runStartedAt,
@@ -179,6 +187,7 @@ describe("dispatchCronDelivery — double-announce guard", () => {
     vi.mocked(readDescendantSubagentFallbackReply).mockResolvedValue(undefined);
     vi.mocked(waitForDescendantSubagentSummary).mockResolvedValue(undefined);
     vi.mocked(retireSessionMcpRuntime).mockResolvedValue(true);
+    maybeApplyTtsToPayloadMock.mockReset().mockImplementation(async (params) => params.payload);
   });
 
   afterEach(() => {
@@ -271,6 +280,42 @@ describe("dispatchCronDelivery — double-announce guard", () => {
     );
   });
 
+  it("uses the run-scoped session key for isolated cron descendant fallback delivery", async () => {
+    const runStartedAt = 1_000;
+    const agentSessionKey = "agent:main:cron:daily-monitor";
+    const runSessionKey = "agent:main:cron:daily-monitor:run:test-session-id";
+    vi.mocked(countActiveDescendantRuns).mockReturnValue(0);
+    vi.mocked(isLikelyInterimCronMessage).mockReturnValue(true);
+    vi.mocked(readDescendantSubagentFallbackReply).mockImplementation(async (params) =>
+      params.sessionKey === runSessionKey
+        ? "Run-scoped child result, everything finished successfully."
+        : undefined,
+    );
+
+    const params = makeBaseParams({
+      synthesizedText: "on it",
+      runStartedAt,
+      runSessionKey,
+    });
+    params.agentSessionKey = agentSessionKey;
+
+    const state = await dispatchCronDelivery(params);
+
+    expect(countActiveDescendantRuns).toHaveBeenCalledWith(runSessionKey);
+    expect(countActiveDescendantRuns).not.toHaveBeenCalledWith(agentSessionKey);
+    expect(readDescendantSubagentFallbackReply).toHaveBeenCalledWith({
+      sessionKey: runSessionKey,
+      runStartedAt,
+    });
+    expect(state.deliveryAttempted).toBe(true);
+    expect(state.delivered).toBe(true);
+    expect(deliverOutboundPayloads).toHaveBeenCalledWith(
+      expect.objectContaining({
+        payloads: [{ text: "Run-scoped child result, everything finished successfully." }],
+      }),
+    );
+  });
+
   it("normal text delivery sends exactly once and sets deliveryAttempted=true", async () => {
     vi.mocked(countActiveDescendantRuns).mockReturnValue(0);
     vi.mocked(isLikelyInterimCronMessage).mockReturnValue(false);
@@ -296,6 +341,62 @@ describe("dispatchCronDelivery — double-announce guard", () => {
         isCronSystemEvent: () => true,
       }),
     ).toBe(false);
+  });
+
+  it("applies TTS directives before direct cron announce delivery", async () => {
+    vi.mocked(countActiveDescendantRuns).mockReturnValue(0);
+    vi.mocked(isLikelyInterimCronMessage).mockReturnValue(false);
+    maybeApplyTtsToPayloadMock.mockImplementation(async (params: { payload: unknown }) => {
+      const payload = params.payload as { text?: string };
+      expect(payload.text).toBe("[[tts]] Morning briefing complete.");
+      return {
+        text: "Morning briefing complete.",
+        mediaUrl: "file:///tmp/cron-tts.mp3",
+        audioAsVoice: true,
+        spokenText: "Morning briefing complete.",
+      };
+    });
+
+    const params = makeBaseParams({
+      synthesizedText: "[[tts]] Morning briefing complete.",
+      runStartedAt: 1_000,
+    });
+    params.cfgWithAgentDefaults = {
+      messages: {
+        tts: {
+          auto: "tagged",
+          provider: "microsoft",
+        },
+      },
+    } as never;
+
+    const state = await dispatchCronDelivery(params);
+
+    expect(state.deliveryAttempted).toBe(true);
+    expect(state.delivered).toBe(true);
+    expect(maybeApplyTtsToPayloadMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        cfg: params.cfgWithAgentDefaults,
+        channel: "telegram",
+        kind: "final",
+        agentId: "main",
+        accountId: undefined,
+      }),
+    );
+    expect(deliverOutboundPayloads).toHaveBeenCalledWith(
+      expect.objectContaining({
+        channel: "telegram",
+        to: "123456",
+        payloads: [
+          {
+            text: "Morning briefing complete.",
+            mediaUrl: "file:///tmp/cron-tts.mp3",
+            audioAsVoice: true,
+            spokenText: "Morning briefing complete.",
+          },
+        ],
+      }),
+    );
   });
 
   it("preserves all successful text payloads for direct delivery", async () => {

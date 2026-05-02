@@ -1,5 +1,5 @@
 import fs from "node:fs";
-import { loadConfig } from "../config/config.js";
+import { getRuntimeConfig } from "../config/config.js";
 import {
   capEntryCount,
   enforceSessionDiskBudget,
@@ -34,7 +34,7 @@ import {
   toSessionDisplayRows,
 } from "./sessions-table.js";
 
-export type SessionsCleanupOptions = {
+type SessionsCleanupOptions = {
   store?: string;
   agent?: string;
   allAgents?: boolean;
@@ -296,7 +296,7 @@ function renderStoreDryRunPlan(params: {
 }
 
 export async function sessionsCleanupCommand(opts: SessionsCleanupOptions, runtime: RuntimeEnv) {
-  const cfg = loadConfig();
+  const cfg = getRuntimeConfig();
   const displayDefaults = resolveSessionDisplayDefaults(cfg);
   const mode = opts.enforce ? "enforce" : resolveMaintenanceConfig().mode;
   const targets = resolveSessionStoreTargetsOrExit({

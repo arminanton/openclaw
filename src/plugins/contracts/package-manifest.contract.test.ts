@@ -1,4 +1,4 @@
-import { describePackageManifestContract } from "../../../test/helpers/plugins/package-manifest-contract.js";
+import { describePackageManifestContract } from "openclaw/plugin-sdk/plugin-test-contracts";
 
 type PackageManifestContractParams = Parameters<typeof describePackageManifestContract>[0];
 
@@ -6,22 +6,16 @@ const packageManifestContractTests: PackageManifestContractParams[] = [
   { pluginId: "bluebubbles", minHostVersionBaseline: "2026.3.22" },
   {
     pluginId: "discord",
-    pluginLocalRuntimeDeps: [
-      "@buape/carbon",
-      "@discordjs/voice",
-      "discord-api-types",
-      "opusscript",
-    ],
-    mirroredRootRuntimeDeps: ["https-proxy-agent"],
+    pluginLocalRuntimeDeps: ["@discordjs/voice", "discord-api-types", "opusscript"],
     minHostVersionBaseline: "2026.3.22",
   },
   {
     pluginId: "feishu",
     pluginLocalRuntimeDeps: ["@larksuiteoapi/node-sdk"],
-    mirroredRootRuntimeDeps: ["typebox", "qrcode-terminal"],
     minHostVersionBaseline: "2026.3.22",
   },
   { pluginId: "google", pluginLocalRuntimeDeps: ["@google/genai"] },
+  { pluginId: "google-meet" },
   {
     pluginId: "googlechat",
     pluginLocalRuntimeDeps: ["gaxios", "google-auth-library"],
@@ -43,8 +37,11 @@ const packageManifestContractTests: PackageManifestContractParams[] = [
   },
   {
     pluginId: "diffs",
-    pluginLocalRuntimeDeps: ["@pierre/diffs", "@pierre/theme", "playwright-core"],
-    mirroredRootRuntimeDeps: ["typebox"],
+    pluginLocalRuntimeDeps: ["@pierre/diffs", "@pierre/theme"],
+  },
+  {
+    pluginId: "file-transfer",
+    pluginLocalRuntimeDeps: ["minimatch"],
   },
   {
     pluginId: "matrix",
@@ -55,14 +52,12 @@ const packageManifestContractTests: PackageManifestContractParams[] = [
       "matrix-js-sdk",
       "music-metadata",
     ],
-    mirroredRootRuntimeDeps: ["markdown-it"],
     minHostVersionBaseline: "2026.3.22",
   },
   { pluginId: "mattermost", minHostVersionBaseline: "2026.3.22" },
   {
     pluginId: "memory-lancedb",
     pluginLocalRuntimeDeps: ["@lancedb/lancedb"],
-    mirroredRootRuntimeDeps: ["typebox", "openai"],
     minHostVersionBaseline: "2026.3.22",
   },
   {
@@ -71,10 +66,10 @@ const packageManifestContractTests: PackageManifestContractParams[] = [
       "@azure/identity",
       "@microsoft/teams.api",
       "@microsoft/teams.apps",
+      "express",
       "jsonwebtoken",
       "jwks-rsa",
     ],
-    mirroredRootRuntimeDeps: ["typebox", "express"],
     minHostVersionBaseline: "2026.3.22",
   },
   { pluginId: "nextcloud-talk", minHostVersionBaseline: "2026.3.22" },
@@ -87,12 +82,10 @@ const packageManifestContractTests: PackageManifestContractParams[] = [
   {
     pluginId: "qqbot",
     pluginLocalRuntimeDeps: ["@tencent-connect/qqbot-connector", "mpg123-decoder", "silk-wasm"],
-    mirroredRootRuntimeDeps: ["ws"],
   },
   {
     pluginId: "slack",
     pluginLocalRuntimeDeps: ["@slack/bolt", "@slack/web-api"],
-    mirroredRootRuntimeDeps: ["https-proxy-agent"],
   },
   { pluginId: "synology-chat", minHostVersionBaseline: "2026.3.22" },
   {
@@ -105,7 +98,6 @@ const packageManifestContractTests: PackageManifestContractParams[] = [
   {
     pluginId: "whatsapp",
     pluginLocalRuntimeDeps: ["@whiskeysockets/baileys", "jimp"],
-    mirroredRootRuntimeDeps: ["qrcode-terminal"],
     minHostVersionBaseline: "2026.3.22",
   },
   { pluginId: "zalo", minHostVersionBaseline: "2026.3.22" },
