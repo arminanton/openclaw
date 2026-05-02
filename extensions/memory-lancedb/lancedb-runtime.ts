@@ -44,76 +44,26 @@ export function createLanceDbRuntimeLoader(overrides: Partial<LanceDbRuntimeLoad
     platform: overrides.platform ?? process.platform,
     arch: overrides.arch ?? process.arch,
     importBundled: overrides.importBundled ?? (() => import("@lancedb/lancedb")),
-    // Ensure these are defined in your deps or passed via overrides
-    ...overrides 
   };
 
   let loadPromise: Promise<LanceDbModule> | null = null;
 
   return {
-    async load(logger?: LanceDbRuntimeLogger): Promise<LanceDbModule> {
+    async load(_logger?: LanceDbRuntimeLogger): Promise<LanceDbModule> {
       if (!loadPromise) {
-        loadPromise = (async () => {
-          try {
-            return await deps.importBundled();
-          } catch (bundledError) {
-            // 1. From 'main': Reset the promise so a failed load can be retried later
-            loadPromise = null;
-
-            // 2. From 'feat': Attempt to find/load a sidecar runtime from the state dir
-            const runtimeDir = resolveRuntimeDir(
-              deps.resolveStateDir(deps.env, () =>
-                deps.env.HOME?.trim() ? deps.env.HOME : os.homedir(),
-              ),
+        loadPromise = deps.importBundled().catch((error) => {
+          loadPromise = null;
+          if (isUnsupportedNativePlatform({ platform: deps.platform, arch: deps.arch })) {
+            throw new Error(
+              buildUnsupportedNativePlatformMessage({
+                platform: deps.platform,
+                arch: deps.arch,
+              }),
+              { cause: error },
             );
-            
-            const existingRuntime = deps.resolveRuntimeEntry({
-              runtimeDir,
-              manifest: deps.runtimeManifest,
-            });
-
-            if (existingRuntime) {
-              try {
-                return await deps.importResolved(existingRuntime);
-              } catch {
-                // Reinstall below if the cached runtime is incomplete or stale.
-              }
-            }
-
-            // 3. Logic Check: Handle Nix mode constraints
-            if (deps.env.OPENCLAW_NIX_MODE === "1") {
-              throw new Error(
-                buildLoadFailureMessage(
-                  "failed to load LanceDB and Nix mode disables auto-install",
-                  bundledError,
-                ),
-                { cause: bundledError },
-              );
-            }
-
-            // 4. From 'main': Platform support validation
-            const explicitPlatformOverride =
-              typeof overrides.platform === "string" || typeof overrides.arch === "string";
-
-            if (isUnsupportedNativePlatform({ platform: deps.platform, arch: deps.arch })) {
-              throw new Error(
-                buildUnsupportedNativePlatformMessage({
-                  platform: deps.platform,
-                  arch: deps.arch,
-                }),
-                { cause: bundledError },
-              );
-            }
-
-            // 5. Warning & Fallback (where your feat branch was heading)
-            logger?.warn?.(
-              `memory-lancedb: bundled LanceDB runtime unavailable (${String(bundledError)}); installing runtime deps under ${runtimeDir}`,
-            );
-
-            // ... Your auto-install logic likely continues here ...
-            throw new Error(buildLoadFailureMessage(bundledError), { cause: bundledError });
           }
-        })();
+          throw new Error(buildLoadFailureMessage(error), { cause: error });
+        });
       }
       return await loadPromise;
     },
