@@ -95,10 +95,7 @@ export function createLanceDbRuntimeLoader(overrides: Partial<LanceDbRuntimeLoad
             const explicitPlatformOverride =
               typeof overrides.platform === "string" || typeof overrides.arch === "string";
 
-            if (
-              isUnsupportedNativePlatform({ platform: deps.platform, arch: deps.arch }) &&
-              (explicitPlatformOverride || !existingRuntime)
-            ) {
+            if (isUnsupportedNativePlatform({ platform: deps.platform, arch: deps.arch })) {
               throw new Error(
                 buildUnsupportedNativePlatformMessage({
                   platform: deps.platform,

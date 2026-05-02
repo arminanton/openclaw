@@ -567,29 +567,41 @@ export function loadSessionEntry(sessionKey: string) {
   const canonicalKey = resolveSessionStoreKey({ cfg, sessionKey: key });
   const agentId = resolveSessionStoreAgentId(cfg, canonicalKey);
 
-  const { storePath, store } = resolveGatewaySessionStoreLookup({
+  // Initial lookup keeps behavior for the common fast-path cases.
+  let { storePath, store } = resolveGatewaySessionStoreLookup({
     cfg,
     key,
     canonicalKey,
     agentId,
   });
 
+  // resolveGatewaySessionStoreTarget may select a different backing store/canonical
+  // key (for deleted-main / legacy agent mappings). Ensure we actually load the
+  // store at the resolved target storePath so callers receive the backing store
+  // that the target resolver chose (prevents reading/patching the wrong store).
   const target = resolveGatewaySessionStoreTarget({
     cfg,
     key,
     store,
   });
 
+  if (target.storePath && target.storePath !== storePath) {
+    // Reload the store from the resolved target path so subsequent lookups use
+    // the correct backing store.
+    store = loadSessionStore(target.storePath);
+    storePath = target.storePath;
+  }
+
   const freshestMatch = resolveFreshestSessionStoreMatchFromStoreKeys(store, target.storeKeys);
   const legacyKey = freshestMatch?.key !== canonicalKey ? freshestMatch?.key : undefined;
 
-  return { 
-    cfg, 
-    storePath, 
-    store, 
-    entry: freshestMatch?.entry, 
-    canonicalKey, 
-    legacyKey 
+  return {
+    cfg,
+    storePath,
+    store,
+    entry: freshestMatch?.entry,
+    canonicalKey,
+    legacyKey,
   };
 }
 
