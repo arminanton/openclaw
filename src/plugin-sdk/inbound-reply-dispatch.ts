@@ -146,42 +146,43 @@ export async function recordInboundSessionAndDispatchReply(params: {
   replyOptions?: ReplyOptionsForDispatch;
 }): Promise<void> {
   // 1. Initialize the internal channel pipeline[cite: 1]
-  const { 
-    onModelSelected, 
-    onResponseTemplateContextResolved, 
-    ...replyPipeline 
-  } = createChannelReplyPipeline({
-    cfg: params.cfg,
-    agentId: params.agentId,
-    channel: params.channel,
-    accountId: params.accountId,
-  });
+  const { onModelSelected, onResponseTemplateContextResolved, ...replyPipeline } =
+    createChannelReplyPipeline({
+      cfg: params.cfg,
+      agentId: params.agentId,
+      channel: params.channel,
+      accountId: params.accountId,
+    });
 
   const deliver = createNormalizedOutboundDeliverer(params.deliver);
 
   // 2. Extract caller-provided hooks to avoid overwriting them[cite: 1]
   const callerReplyOptions = params.replyOptions ?? {};
   const callerOnModelSelected = callerReplyOptions.onModelSelected;
-  const callerOnResponseTemplateContextResolved = callerReplyOptions.onResponseTemplateContextResolved;
+  const callerOnResponseTemplateContextResolved =
+    callerReplyOptions.onResponseTemplateContextResolved;
 
-  /** 
-   * Local helper to compose two callbacks. 
-   * It ensures both run in sequence and awaits them if they are async.[cite: 1]
+  type AsyncCallback<TArgs extends unknown[]> = (...args: TArgs) => void | Promise<void>;
+
+  /**
+   * Compose two optional async/sync callbacks into one callback that runs both
+   * in order.
    */
-  function composeAsyncTwo<T extends (...args: any[]) => any>(
-    primary?: T,
-    secondary?: T,
-  ): T | undefined {
-    if (!primary && !secondary) return undefined;
-    
-    return (async (...args: Parameters<T>) => {
+  function composeAsyncTwo<TArgs extends unknown[]>(
+    primary?: AsyncCallback<TArgs>,
+    secondary?: AsyncCallback<TArgs>,
+  ): AsyncCallback<TArgs> | undefined {
+    if (!primary && !secondary) {
+      return undefined;
+    }
+    return async (...args: TArgs) => {
       if (primary) {
         await primary(...args);
       }
       if (secondary) {
         await secondary(...args);
       }
-    }) as unknown as T;
+    };
   }
 
   // 3. Compose the internal pipeline hooks with the caller's hooks[cite: 1]

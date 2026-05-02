@@ -143,7 +143,19 @@ export const SessionSchema = z
   .strict()
   .optional();
 
-export const MessagesSchema = z
+function stripDeprecatedMessagesNoopKeys(value: unknown): unknown {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return value;
+  }
+  if (!Object.hasOwn(value, "textChunkLimit")) {
+    return value;
+  }
+  const next = { ...(value as Record<string, unknown>) };
+  delete next.textChunkLimit;
+  return next;
+}
+
+const MessagesObjectSchema = z
   .object({
     messagePrefix: z.string().optional(),
     visibleReplies: z.enum(["automatic", "message_tool"]).optional(),
@@ -190,7 +202,10 @@ export const MessagesSchema = z
     suppressToolErrors: z.boolean().optional(),
     tts: TtsConfigSchema,
   })
-  .strict()
+  .strict();
+
+export const MessagesSchema = z
+  .preprocess(stripDeprecatedMessagesNoopKeys, MessagesObjectSchema)
   .optional();
 
 export const CommandsSchema = z

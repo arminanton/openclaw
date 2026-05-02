@@ -40,6 +40,7 @@ import {
   shouldKeepSubagentRunChildLink,
 } from "../agents/subagent-run-liveness.js";
 import { listThinkingLevelOptions } from "../auto-reply/thinking.js";
+import { normalizeUsageDisplay } from "../auto-reply/thinking.js";
 import { getRuntimeConfig } from "../config/io.js";
 import { resolveAgentModelFallbackValues } from "../config/model-input.js";
 import { resolveStateDir } from "../config/paths.js";
@@ -55,7 +56,6 @@ import {
   type SessionScope,
 } from "../config/sessions.js";
 import type { OpenClawConfig } from "../config/types.openclaw.js";
-import { normalizeUsageDisplay } from "../auto-reply/thinking.js";
 import { openBoundaryFileSync } from "../infra/boundary-file-read.js";
 import { projectPluginSessionExtensionsSync } from "../plugins/host-hook-state.js";
 import {
@@ -542,28 +542,6 @@ export function resolveDeletedAgentIdFromSessionKey(
   return agentId;
 }
 
-function resolveLoadSessionStoreLookupInput(args: {
-  cfg: OpenClawConfig;
-  sessionKey: string;
-  canonicalKey: string;
-  agentId: string;
-}): { key: string; canonicalKey: string; agentId: string } {
-  const rawKey = normalizeOptionalString(args.sessionKey) ?? "";
-  const deletedAgentId = resolveDeletedAgentIdFromSessionKey(args.cfg, rawKey);
-  if (deletedAgentId === DEFAULT_AGENT_ID) {
-    return {
-      key: rawKey,
-      canonicalKey: rawKey,
-      agentId: deletedAgentId,
-    };
-  }
-  return {
-    key: rawKey,
-    canonicalKey: args.canonicalKey,
-    agentId: args.agentId,
-  };
-}
-
 export function loadSessionEntry(sessionKey: string) {
   const cfg = getRuntimeConfig();
   const key = normalizeOptionalString(sessionKey) ?? "";
@@ -595,15 +573,16 @@ export function loadSessionEntry(sessionKey: string) {
     storePath = target.storePath;
   }
 
+  const resolvedCanonicalKey = target.canonicalKey;
   const freshestMatch = resolveFreshestSessionStoreMatchFromStoreKeys(store, target.storeKeys);
-  const legacyKey = freshestMatch?.key !== canonicalKey ? freshestMatch?.key : undefined;
+  const legacyKey = freshestMatch?.key !== resolvedCanonicalKey ? freshestMatch?.key : undefined;
 
   return {
     cfg,
     storePath,
     store,
     entry: freshestMatch?.entry,
-    canonicalKey,
+    canonicalKey: resolvedCanonicalKey,
     legacyKey,
   };
 }
@@ -1659,7 +1638,9 @@ export function buildGatewaySessionRow(params: {
     runtimeMs: subagentRun ? subagentRuntimeMs : entry?.runtimeMs,
     parentSessionKey: subagentOwner || entry?.parentSessionKey,
     childSessions,
-    responseUsage: normalizeUsageDisplay(entry?.responseUsage ?? cfg.agents?.defaults?.responseUsage),
+    responseUsage: normalizeUsageDisplay(
+      entry?.responseUsage ?? cfg.agents?.defaults?.responseUsage,
+    ),
     modelProvider: rowModelProvider,
     model: rowModel,
     agentRuntime,

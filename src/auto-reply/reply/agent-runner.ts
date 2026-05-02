@@ -1549,21 +1549,25 @@ export async function runReplyAgent(params: {
         workspaceDir: followupRun.run.workspaceDir,
       });
       const showCost = authMode === "api-key";
-      const costConfig = showCost ? resolveModelCostConfig({ provider: providerUsed, model: modelUsed, config: cfg }) : undefined;
-      
+      const costConfig = showCost
+        ? resolveModelCostConfig({ provider: providerUsed, model: modelUsed, config: cfg })
+        : undefined;
+
       let formatted = formatResponseUsageLine({ usage, showCost, costConfig });
       if (formatted && responseUsageMode === "full" && sessionKey) {
         formatted = `${formatted} · session \`${sessionKey}\``;
       }
-      if (formatted) responseUsageLine = formatted;
+      if (formatted) {
+        responseUsageLine = formatted;
+      }
     }
 
     // Feat's template logic
     const responseFooterTemplate = normalizeOptionalString(cfg.messages?.responseFooter);
     const shouldResolveFooter = responseFooterTemplate !== undefined;
-    const shouldResolveLateTemplateContext = 
-      shouldResolveFooter || 
-      responseUsageMode !== "off" || 
+    const shouldResolveLateTemplateContext =
+      shouldResolveFooter ||
+      responseUsageMode !== "off" ||
       Boolean(opts?.onResponseTemplateContextResolved);
 
     if (verboseEnabled || responseUsageMode === "full" || shouldResolveLateTemplateContext) {

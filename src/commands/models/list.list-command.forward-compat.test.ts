@@ -18,6 +18,18 @@ const OPENAI_CODEX_53_MODEL = {
   name: "GPT-5.3 Codex",
 };
 
+const EMPTY_PLUGIN_INDEX = {
+  version: 1,
+  hostContractVersion: "test",
+  compatRegistryVersion: "test",
+  migrationVersion: 1,
+  policyHash: "test",
+  generatedAtMs: 0,
+  installRecords: {},
+  plugins: [],
+  diagnostics: [],
+};
+
 const mocks = vi.hoisted(() => {
   const sourceConfig = {
     agents: { defaults: { model: { primary: "openai-codex/gpt-5.4" } } },
@@ -57,7 +69,11 @@ const mocks = vi.hoisted(() => {
     printModelTable: vi.fn(),
     resolveModelWithRegistry: vi.fn(),
     readPersistedInstalledPluginIndexSync: vi.fn(),
-    loadPluginRegistrySnapshotWithMetadata: vi.fn(),
+    loadPluginRegistrySnapshotWithMetadata: vi.fn(() => ({
+      source: "persisted",
+      snapshot: EMPTY_PLUGIN_INDEX,
+      diagnostics: [],
+    })),
   };
 });
 
@@ -98,7 +114,7 @@ function resetMocks() {
   mocks.readPersistedInstalledPluginIndexSync.mockReturnValue(null);
   mocks.loadPluginRegistrySnapshotWithMetadata.mockReturnValue({
     source: "persisted",
-    snapshot: { plugins: [] },
+    snapshot: EMPTY_PLUGIN_INDEX,
     diagnostics: [],
   });
 }
